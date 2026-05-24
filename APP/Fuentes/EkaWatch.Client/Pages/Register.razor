@@ -1,0 +1,70 @@
+﻿@page "/register"
+@inject AuthService AuthService
+@inject NavigationManager Nav
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div style="width: 100%; max-width: 400px;">
+        <RadzenCard>
+            <h3 class="mb-4">Crear cuenta</h3>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" class="mb-3">@errorMessage</RadzenAlert>
+            }
+
+            <RadzenFormField Text="Usuario" class="w-100 mb-3">
+                <RadzenTextBox @bind-Value="username" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Email" class="w-100 mb-3">
+                <RadzenTextBox @bind-Value="email" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Contraseña" class="w-100 mb-3">
+                <RadzenPassword @bind-Value="password" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Repite la contraseña" class="w-100 mb-4">
+                <RadzenPassword @bind-Value="samePassword" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenButton Text="Registrarse" ButtonStyle="ButtonStyle.Primary" class="w-100 mb-3"
+                          Click="HandleRegister" IsBusy="loading" />
+
+            <p class="text-center mt-2">
+                ¿Ya tienes cuenta? <a href="/login">Inicia sesión</a>
+            </p>
+        </RadzenCard>
+    </div>
+</div>
+
+@code {
+    private string username = "";
+    private string email = "";
+    private string password = "";
+    private string samePassword = "";
+    private string errorMessage = "";
+    private bool loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitAsync();
+        if (AuthService.IsLoggedIn)
+            Nav.NavigateTo("/");
+    }
+
+    private async Task HandleRegister()
+    {
+        errorMessage = "";
+        loading = true;
+
+        var success = await AuthService.RegisterAsync(username, email, password, samePassword);
+
+        if (success)
+            Nav.NavigateTo("/");
+        else
+            errorMessage = "Error al registrarse. El usuario o email puede que ya exista.";
+
+        loading = false;
+    }
+}

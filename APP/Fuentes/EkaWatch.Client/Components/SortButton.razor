@@ -1,0 +1,31 @@
+<button class="btn btn-sm"
+        style="background: #222C38; color: #ddd; border: none; border-radius: 50%; height: 36px; width: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;"
+        onmouseover="this.style.background='#1A222A'" onmouseout="this.style.background='#222C38'"
+        @onclick="CycleSort">
+    <i class="fa-solid @SortIcon"></i>
+</button>
+
+@code {
+    private string _sortOrder = "none";
+
+    [Parameter]
+    public EventCallback<string> OnSortChanged { get; set; }
+
+    private void CycleSort()
+    {
+        _sortOrder = _sortOrder switch
+        {
+            "none" => "asc",
+            "asc" => "desc",
+            _ => "none"
+        };
+        OnSortChanged.InvokeAsync(_sortOrder);
+    }
+
+    private string SortIcon => _sortOrder switch
+    {
+        "none" => "fa-arrow-down-a-z",
+        "asc" => "fa-arrow-down-z-a",
+        _ => "fa-arrow-down-short-wide"
+    };
+}

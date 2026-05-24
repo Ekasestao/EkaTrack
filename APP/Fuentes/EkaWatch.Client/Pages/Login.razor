@@ -1,0 +1,60 @@
+﻿@page "/login"
+@inject AuthService AuthService
+@inject NavigationManager Nav
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div style="width: 100%; max-width: 400px;">
+        <RadzenCard>
+            <h3 class="mb-4">Iniciar sesión</h3>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" class="mb-3">@errorMessage</RadzenAlert>
+            }
+
+            <RadzenFormField Text="Usuario o email" class="w-100 mb-3">
+                <RadzenTextBox @bind-Value="credential" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenFormField Text="Contraseña" class="w-100 mb-4">
+                <RadzenPassword @bind-Value="password" class="w-100" />
+            </RadzenFormField>
+
+            <RadzenButton Text="Entrar" ButtonStyle="ButtonStyle.Primary" class="w-100 mb-3"
+                          Click="HandleLogin" IsBusy="loading" />
+
+            <p class="text-center mt-2">
+                ¿No tienes cuenta? <a href="/register">Regístrate</a>
+            </p>
+        </RadzenCard>
+    </div>
+</div>
+
+@code {
+    private string credential = "";
+    private string password = "";
+    private string errorMessage = "";
+    private bool loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitAsync();
+        if (AuthService.IsLoggedIn)
+            Nav.NavigateTo("/");
+    }
+
+    private async Task HandleLogin()
+    {
+        errorMessage = "";
+        loading = true;
+
+        var success = await AuthService.LoginAsync(credential, password);
+
+        if (success)
+            Nav.NavigateTo("/");
+        else
+            errorMessage = "Credenciales incorrectas. Inténtalo de nuevo.";
+
+        loading = false;
+    }
+}

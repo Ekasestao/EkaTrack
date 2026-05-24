@@ -1,0 +1,68 @@
+# ── OS ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+~$*
+
+# ── .NET / C# ─────────────────────────────────────
+bin/
+obj/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.csproj.user
+*.DotSettings.user
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.VisualState.xml
+TestResult.xml
+*.nupkg
+**/packages/*
+*.db
+*.db-shm
+*.db-wal
+
+# ── Python ────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.env
+venv/
+.venv/
+*.so
+
+# ── IDE / Editor ──────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── Node / Frontend tools ─────────────────────────
+node_modules/
+
+# ── Logs / Temp ───────────────────────────────────
+*.log
+*.tmp
+*.temp

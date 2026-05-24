@@ -1,104 +1,72 @@
-# Contexto del proyecto — Watchlist App
+# EkaWatch
 
-## Descripción
+Aplicación web de seguimiento de películas y series. Busca títulos en TMDB, organiza listas personalizadas, marca como vistos o pendientes, y descubre nuevos estrenos.
 
-Aplicación web personal de seguimiento de películas y series. Permite gestionar una watchlist, registrar títulos vistos y añadir valoraciones personales. Uso personal, un solo usuario.
+## Stack
 
----
-
-## Stack tecnológico
-
-### Frontend
-
-- **Blazor WebAssembly (.NET)**
-- Corre íntegramente en el navegador del usuario (compilado a WebAssembly)
-- Componentes `.razor` para vistas: watchlist, búsqueda, detalle de película, ratings
-- Comunicación con el backend exclusivamente via `HttpClient` (llamadas HTTP/JSON)
-- Sin acceso directo a base de datos ni al sistema de archivos
-
-### Backend / API
-
-- **Flask (Python)**
-- API REST ligera que actúa de intermediario entre el frontend y TMDB
-- Oculta la API key de TMDB — nunca se expone al cliente
-- Gestiona las operaciones de lectura/escritura sobre la base de datos
-- CORS habilitado con `flask-cors` para permitir peticiones desde el dominio de Firebase
-
-### Base de datos
-
-- **SQLite**
-- Disponible para todas las cuentas de PythonAnywhere incluidas las nuevas gratuitas
-- Un único archivo `.db` alojado en el sistema de archivos de PythonAnywhere
-- Acceso desde Flask con `flask-sqlalchemy` o el módulo `sqlite3` de la librería estándar
-- Adecuado para uso personal de un solo usuario — las advertencias de rendimiento de PythonAnywhere aplican a apps con mucho tráfico concurrente
-
-### API externa
-
-- **TMDB (The Movie Database)**
-- Proporciona metadatos de películas y series: título, póster, géneros, sinopsis, reparto, ratings
-- Gratuita para uso no comercial
-- Rate limit: ~40 requests/segundo por IP (más que suficiente para uso personal)
-- Requiere mostrar el logo de TMDB como atribución
-- La API key se guarda como variable de entorno en PythonAnywhere, nunca en el código
-
----
-
-## Hosting
-
-| Capa                          | Servicio         | Plan            | Coste  |
-| ----------------------------- | ---------------- | --------------- | ------ |
-| Frontend (Blazor WASM)        | Firebase Hosting | Spark (free)    | Gratis |
-| Backend + BD (Flask + SQLite) | PythonAnywhere   | Beginner (free) | Gratis |
-| API externa                   | TMDB             | Developer       | Gratis |
-
----
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | Blazor WASM (.NET 10, Radzen UI) |
+| Backend | Flask (Python) en PythonAnywhere |
+| Base de datos | SQLite |
+| API externa | TMDB (The Movie Database) |
 
 ## Arquitectura
 
 ```
-Browser
-  └── Blazor WASM (Firebase Hosting)
-        └── HttpClient
-              └── Flask API (PythonAnywhere)
-                    ├── SQLite — watchlist.db (PythonAnywhere)
-                    └── TMDB API (externa)
+Browser → Blazor WASM → HttpClient (X-User-Id header) → Flask API → SQLite + TMDB
 ```
 
----
+Auth vía header `X-User-Id` (no cookies cross-origin).
 
-## Funcionalidades previstas
+## Funcionalidades
 
-- Buscar películas y series por título (via TMDB)
-- Ver detalle de una película: póster, sinopsis, géneros, reparto
-- Añadir títulos a la watchlist (pendiente de ver)
-- Marcar títulos como vistos
-- Añadir valoración personal (puntuación y/o notas)
-- Listar watchlist con filtros (pendiente / visto)
+- **Tendencias** — Home con scroll infinito, filtros por Películas/Series, TMDB trending
+- **Búsqueda** — Autocomplete en navbar con debounce (300ms), sugerencias TMDB + recientes
+- **Detalle** — Póster, backdrop, sinopsis, reparto, géneros, tagline
+- **Listas** — Watchlist, Visto, Me gusta (toggle desde detalle) + listas personalizadas
+- **Nuevo** — Estrenos (now_playing) y Próximamente (upcoming), agrupados por fecha
+- **Recientes** — Últimos 6 títulos visitados guardados en localStorage
 
----
+## Desarrollo local
 
-## Decisiones técnicas relevantes
+### Backend
 
-**¿Por qué Blazor WASM y no Blazor Server?**
-Blazor Server requiere un servidor .NET corriendo continuamente con conexiones SignalR activas. Firebase Hosting solo sirve archivos estáticos y PythonAnywhere solo ejecuta Python, por lo que Blazor Server no es compatible con este stack. Blazor WASM se despliega como un sitio estático y es la opción correcta aquí.
+```bash
+cd API
+pip install -r requirements.txt  # flask, flask-cors, requests, werkzeug
+cp .env.example .env             # editar con tus API keys
+python app.py                    # arranca en :5000
+```
 
-**¿Por qué Flask y no una API .NET?**
-PythonAnywhere no soporta .NET. Flask es la opción natural dado que PythonAnywhere es el hosting de backend elegido, y es suficiente para los endpoints que necesita esta aplicación.
+### Frontend
 
-**¿Por qué SQLite y no MySQL?**
-Las cuentas nuevas de PythonAnywhere (creadas desde enero de 2026) ya no incluyen MySQL en el plan gratuito. SQLite está disponible para todas las cuentas y es perfectamente válido para este proyecto: uso personal, un solo usuario, sin escrituras concurrentes. El archivo `.db` vive en el sistema de archivos de PythonAnywhere junto a la API Flask.
+```bash
+cd "APP/Fuentes"
+dotnet restore
+dotnet run --project EkaWatch   # arranca en :7094 (https)
+```
 
-**¿Por qué Firebase Hosting?**
-Ya utilizado en proyectos anteriores del mismo desarrollador. Despliegue sencillo via CLI (`firebase deploy`), CDN global incluido, HTTPS automático, plan Spark gratuito sin límite de tiempo.
+### Tests
 
----
+```bash
+cd "APP/Fuentes/EkaWatch.Tests"
+dotnet test
+```
 
-## Diferencias clave entre Blazor WASM y Server (resumen)
+(29 tests — ListsService: 12, TmdbService: 17)
 
-| Aspecto            | WASM (este proyecto) | Server                           |
-| ------------------ | -------------------- | -------------------------------- |
-| Dónde corre C#     | En el browser        | En el servidor                   |
-| Acceso a BD        | Solo via HTTP        | Directo (inyección de DbContext) |
-| API key TMDB       | Segura en Flask      | Segura en el servidor .NET       |
-| Hosting compatible | Estático (Firebase)  | Servidor .NET activo             |
-| Sintaxis `.razor`  | Idéntica             | Idéntica                         |
+## Hosting
+
+| Capa | Servicio | Plan |
+|------|----------|------|
+| Frontend | ASP.NET Core host | Local / servidor .NET |
+| Backend + BD | PythonAnywhere | Beginner (free) |
+| API externa | TMDB | Developer (free) |
+
+## Estado del proyecto
+
+Todas las funcionalidades core están implementadas y funcionando. Queda como backlog:
+
+- [ ] Tracking por episodio en series
+- [ ] Página de perfil / avatar

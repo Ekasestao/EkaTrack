@@ -1,0 +1,451 @@
+﻿@inherits LayoutComponentBase
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject TmdbService Tmdb
+@using EkaWatch.Client.Models
+
+<HeadContent>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+</HeadContent>
+
+<RadzenLayout>
+    <RadzenHeader>
+        <div class="d-flex align-items-center w-100" style="gap: 3rem; padding: 0 185px;">
+
+            <a href="/" class="fw-bold text-decoration-none" style="color: #cea235; line-height: 1; font-size: 1.75rem;">
+                <i class="fa-solid fa-play" style="margin-right: 6px;"></i>EkaWatch
+            </a>
+
+            <nav class="d-flex align-items-center" style="gap: 2rem;">
+                <a href="/" class="nav-link" style="@(IsActive("/") ? "color: #fff !important; font-weight: 700;" : "")">Inicio</a>
+                <a href="/nuevo" class="nav-link" style="@(IsActive("/nuevo") ? "color: #fff !important; font-weight: 700;" : "")">Nuevo</a>
+                @if (AuthService.IsLoggedIn)
+                {
+                    <a href="/listas" class="nav-link" style="@(IsActive("/listas") ? "color: #fff !important; font-weight: 700;" : "")">Listas</a>
+                }
+            </nav>
+
+            <div class="flex-grow-1" style="position: relative; @(showDropdown ? "z-index: 1001;" : "")">
+                <div class="d-flex" style="position: relative; @(showDropdown ? "z-index: 1002;" : "")">
+                    <i class="fa-solid fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #999c9f; z-index: 1;"></i>
+                    <input @bind="searchText"
+                           @bind:event="oninput"
+                           @bind:after="OnSearchAfterBind"
+                           @onfocus="OnSearchFocus"
+                           @onblur="OnSearchBlur"
+                           @onkeydown="OnSearchKeyDown"
+                           placeholder="Búsqueda de Películas o Series de TV"
+                           class="form-control"
+                           style="background: #10161D; color: white; border: none; border-radius: @(showDropdown ? "4px 4px 0 0" : "4px"); padding-left: 36px;" />
+                </div>
+
+                @if (showDropdown)
+                {
+                    <div @onmousedown="@(() => showDropdown = false)"
+                         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                                background: rgba(0,0,0,0.35); z-index: 999;">
+                    </div>
+                    <div style="position: absolute; top: 100%; left: 0; right: 0; background: #10161D;
+                                border: none; border-radius: 0 0 8px 8px; z-index: 1000;
+                                height: 450px; display: flex; flex-direction: column;">
+                        <div style="flex: 1; overflow-y: auto;">
+                        @if (searchText.Length >= 3)
+                        {
+                            @if (searchItems.Count > 0)
+                            {
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px;">
+                            @foreach (var item in searchItems)
+                            {
+                                <div @onmousedown="@(() => SelectItem(item))"
+                                     style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 12px; border-radius: 8px;"
+                                     onmouseover="this.style.background='#1C252F'"
+                                     onmouseout="this.style.background='transparent'">
+                                    @if (!string.IsNullOrEmpty(item.PosterPath))
+                                    {
+                                        <img src="https://image.tmdb.org/t/p/w92@(item.PosterPath)"
+                                             alt="" style="width: 46px; height: 69px; object-fit: cover; border-radius: 4px;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 46px; height: 69px; display: flex; align-items: center; justify-content: center; background: #2d2b4a; border-radius: 4px;">
+                                            <i class="fa-solid @(item.MediaType == "movie" ? "fa-film" : "fa-tv")" style="font-size: 1.2rem; color: #888;"></i>
+                                        </div>
+                                    }
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="color: #ddd; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@item.Title</div>
+                                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                                            <span style="color: #aaa; font-size: 0.75rem; background: #2d2b4a; padding: 1px 6px; border-radius: 3px;">
+                                                @(item.MediaType == "movie" ? "Película" : "Serie")
+                                            </span>
+                                            @if (!string.IsNullOrEmpty(item.Year))
+                                            {
+                                                <span style="color: #888; font-size: 0.75rem;">@item.Year</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            </div>
+                            }
+                            else
+                            {
+                            <div style="padding: 40px 16px; text-align: center; color: #888;">
+                                <i class="fa-solid fa-face-frown" style="font-size: 2rem; margin-bottom: 12px; display: block; color: #555;"></i>
+                                ¡Ups! No se han encontrado resultados
+                            </div>
+                            }
+                        }
+                        else
+                        {
+                            @if (searchTerms.Count == 0 && searchItems.Count == 0)
+                            {
+                                <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #888;">
+                                    <i class="fa-solid fa-clock-rotate-left" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+                                    No hay búsquedas recientes
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="padding: 12px 16px 8px;">
+                                    @if (searchTerms.Count > 0)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center" style="margin-bottom: 8px;">
+                                            <span style="color: #cea235; font-size: 0.85rem; font-weight: bold;">Búsquedas recientes</span>
+                                            <span @onmousedown="@(async () => { await ClearRecentSearches(); await ClearRecentItems(); })"
+                                                      style="color: #78a6b8; font-size: 1.1rem; cursor: pointer; text-decoration: none;">
+                                                Limpiar todo
+                                            </span>
+                                        </div>
+                                        <div class="d-flex flex-wrap" style="gap: 8px; margin-bottom: 8px;">
+                                        @foreach (var term in searchTerms)
+                                        {
+                                             <div @onmousedown="@(() => { searchText = term; _searchCts?.Cancel(); showDropdown = true; _ = DoSearchImmediate(); })"
+                                                 style="cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 70px; height: 30px; padding: 0 12px; border: 1px solid #383d47; border-radius: 8px;"
+                                                 onmouseover="this.style.background='#1C252F'"
+                                                 onmouseout="this.style.background='transparent'">
+                                                <i class="fa-solid fa-search" style="color: #888; font-size: 0.75rem;"></i>
+                                                <span style="color: #ddd; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">@term</span>
+                                            </div>
+                                        }
+                                        </div>
+                                    }
+                                    @if (searchItems.Count > 0)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center" style="margin-bottom: 12px; @(searchTerms.Count > 0 ? "margin-top: 28px;" : "")">
+                                            <span style="color: #cea235; font-size: 0.85rem; font-weight: bold;">Títulos visitados recientemente</span>
+                                            @if (searchTerms.Count == 0)
+                                            {
+                                                <span @onmousedown="@(async () => await ClearRecentItems())"
+                                                          style="color: #78a6b8; font-size: 1.1rem; cursor: pointer; text-decoration: none;">
+                                                    Limpiar todo
+                                                </span>
+                                            }
+                                        </div>
+                                        <div class="d-flex flex-wrap" style="gap: 16px;">
+                                            @foreach (var item in searchItems.Take(6))
+                                            {
+                                                <div @onmousedown="@(e => { if (e.Button == 0) SelectItem(item); })"
+                                                     style="cursor: pointer; border-radius: 8px; overflow: hidden; background: #2d2b4a;"
+                                                     onmouseover="this.style.opacity='0.8'"
+                                                     onmouseout="this.style.opacity='1'">
+                                                    @if (!string.IsNullOrEmpty(item.PosterPath))
+                                                    {
+                                                        <img src="https://image.tmdb.org/t/p/w185@(item.PosterPath)"
+                                                             alt="@item.Title"
+                                                             style="width: 150px; height: 225px; object-fit: cover; display: block;" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <div style="width: 150px; height: 225px; display: flex; align-items: center; justify-content: center; color: #666;">
+                                                            <i class="fa-solid @(item.MediaType == "movie" ? "fa-film" : "fa-tv")" style="font-size: 2rem;"></i>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        </div>
+                        @if (showDropdown)
+                        {
+                             <div @onmousedown="@(() => DoSearch())"
+                                   style="padding: 14px 12px; cursor: pointer; color: #cea235; font-weight: bold;
+                                         border-top: 1px solid #1C252F; text-align: center;"
+                                  onmouseover="this.style.background='#1C252F'"
+                                  onmouseout="this.style.background='transparent'">
+                                <i class="fa-solid fa-search"></i> Ver más resultados de @searchText
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div style="position: relative;" class="ms-auto">
+                <span @onclick="ToggleMenu" style="color: #cea235; cursor: pointer; font-size: 22px;">
+                    <i class="fa-solid fa-user-gear"></i>
+                </span>
+
+                @if (menuOpen)
+                {
+                    <div @onclick="ToggleMenu" style="position: fixed; top: 0; left: 0; width: 100vw;
+                        height: 100vh; z-index: 999;">
+                    </div>
+
+                    <div style="position: absolute; right: 0; top: 40px; background: #1e1c33;
+                        border: 1px solid #cea235; border-radius: 8px; min-width: 160px;
+                        z-index: 1000; padding: 8px 0;">
+
+                        @if (AuthService.IsLoggedIn)
+                        {
+                            <div style="padding: 10px 16px; color: #cea235; font-weight: bold;
+                                border-bottom: 1px solid #2d2b4a;">
+                                @AuthService.Username
+                            </div>
+                            <div @onclick="HandleLogout"
+                                 style="display: flex; justify-content: center; align-items: center; padding: 10px 16px; color: white; cursor: pointer; gap: 0.8rem;"
+                                 onmouseover="this.style.background='#2d2b4a'"
+                                 onmouseout="this.style.background='transparent'">
+                                Cerrar sesión <i class="fa-solid fa-right-from-bracket"></i>
+                            </div>
+                        }
+                        else
+                        {
+                            <div @onclick="@(() => NavigateAndClose("/login"))"
+                                 style="padding: 10px 16px; color: white; cursor: pointer;"
+                                 onmouseover="this.style.background='#2d2b4a'"
+                                 onmouseout="this.style.background='transparent'">
+                                <i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión
+                            </div>
+                            <div @onclick="@(() => NavigateAndClose("/register"))"
+                                 style="padding: 10px 16px; color: white; cursor: pointer;"
+                                 onmouseover="this.style.background='#2d2b4a'"
+                                 onmouseout="this.style.background='transparent'">
+                                <i class="fa-solid fa-user-plus"></i> Registrarse
+                            </div>
+                        }
+
+                    </div>
+                }
+            </div>
+        </div>
+    </RadzenHeader>
+
+    <RadzenBody Style="margin: 0;">
+        <div class="pt-3" style="padding: 0 185px;">
+            @Body
+        </div>
+    </RadzenBody>
+</RadzenLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss"><i class="fa-solid fa-xmark"></i></span>
+</div>
+
+<RadzenComponents @rendermode="InteractiveWebAssembly" />
+
+@code {
+    private bool menuOpen;
+    private string searchText = "";
+    private bool showDropdown;
+    private List<TmdbMediaItem> searchItems = [];
+    private List<string> searchTerms = [];
+    private CancellationTokenSource? _searchCts;
+
+    private bool IsActive(string href)
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        if (href == "/") return path == "/";
+        return path.StartsWith(href, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleMenu() => menuOpen = !menuOpen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitAsync();
+        await LoadRecentItems();
+    }
+
+    private async Task OnSearchAfterBind()
+    {
+        _searchCts?.Cancel();
+        showDropdown = true;
+
+        if (searchText.Length >= 3)
+        {
+            _searchCts = new CancellationTokenSource();
+            var token = _searchCts.Token;
+            try
+            {
+                await Task.Delay(300, token);
+                if (!token.IsCancellationRequested)
+                {
+                    var results = await Tmdb.SearchAsync(searchText);
+                    searchItems = results.Where(i => i.MediaType == "movie" || i.MediaType == "tv").Take(8).ToList();
+                    StateHasChanged();
+                }
+            }
+            catch (TaskCanceledException) { }
+        }
+        else
+        {
+            await ShowRecent();
+        }
+    }
+
+    private async Task DoSearchImmediate()
+    {
+        if (searchText.Length >= 3)
+        {
+            searchItems = (await Tmdb.SearchAsync(searchText))
+                .Where(i => i.MediaType == "movie" || i.MediaType == "tv").Take(8).ToList();
+        }
+        else
+        {
+            searchItems = [];
+        }
+        StateHasChanged();
+    }
+
+    private void OnSearchFocus()
+    {
+        showDropdown = true;
+        if (searchText.Length < 3)
+            _ = ShowRecent();
+    }
+
+    private async void OnSearchBlur()
+    {
+        await Task.Delay(200);
+        StateHasChanged();
+    }
+
+    private async Task ShowRecent()
+    {
+        searchItems = await GetRecentItems();
+        searchTerms = await GetRecentSearches();
+        StateHasChanged();
+    }
+
+    private async Task LoadRecentItems()
+    {
+        searchItems = await GetRecentItems();
+    }
+
+    private async Task<List<TmdbMediaItem>> GetRecentItems()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("localStorage.getItem", "ekawatch_recent");
+            if (string.IsNullOrEmpty(json)) return [];
+            return System.Text.Json.JsonSerializer.Deserialize<List<TmdbMediaItem>>(json, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower
+            }) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private async Task SaveRecentItem(TmdbMediaItem item)
+    {
+        try
+        {
+            var items = await GetRecentItems();
+            items.RemoveAll(i => i.Id == item.Id && i.MediaType == item.MediaType);
+            items.Insert(0, item);
+            if (items.Count > 6) items = items.Take(6).ToList();
+
+            var json = System.Text.Json.JsonSerializer.Serialize(items, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower
+            });
+            await JS.InvokeVoidAsync("localStorage.setItem", "ekawatch_recent", json);
+        }
+        catch { }
+    }
+
+    private void SelectItem(TmdbMediaItem item)
+    {
+        showDropdown = false;
+        searchText = "";
+        _ = SaveRecentItem(item);
+        Nav.NavigateTo($"/media/{item.MediaType}/{item.Id}");
+    }
+
+    private async Task ClearRecentItems()
+    {
+        await JS.InvokeVoidAsync("localStorage.removeItem", "ekawatch_recent");
+        searchItems = [];
+        StateHasChanged();
+    }
+
+    private async Task<List<string>> GetRecentSearches()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("localStorage.getItem", "ekawatch_recent_searches");
+            if (string.IsNullOrEmpty(json)) return [];
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch { return []; }
+    }
+
+    private async Task SaveRecentSearch(string query)
+    {
+        try
+        {
+            var items = await GetRecentSearches();
+            items.RemoveAll(s => s == query);
+            items.Insert(0, query);
+            if (items.Count > 6) items = items.Take(6).ToList();
+            var json = System.Text.Json.JsonSerializer.Serialize(items);
+            await JS.InvokeVoidAsync("localStorage.setItem", "ekawatch_recent_searches", json);
+        }
+        catch { }
+    }
+
+    private async Task ClearRecentSearches()
+    {
+        await JS.InvokeVoidAsync("localStorage.removeItem", "ekawatch_recent_searches");
+        searchTerms = [];
+        StateHasChanged();
+    }
+
+    private async Task HandleLogout()
+    {
+        menuOpen = false;
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+
+    private void NavigateAndClose(string url)
+    {
+        menuOpen = false;
+        Nav.NavigateTo(url);
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            DoSearch();
+        }
+    }
+
+    private void DoSearch()
+    {
+        showDropdown = false;
+        if (!string.IsNullOrWhiteSpace(searchText))
+            _ = SaveRecentSearch(searchText);
+        Nav.NavigateTo($"/search?q={Uri.EscapeDataString(searchText)}");
+    }
+}

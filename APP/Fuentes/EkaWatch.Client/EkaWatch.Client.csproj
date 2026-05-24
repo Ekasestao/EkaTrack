@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <BlazorEnableDebugging>false</BlazorEnableDebugging>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.7" />
+    <PackageReference Include="Radzen.Blazor" Version="10.3.2" />
+  </ItemGroup>
+
+</Project>

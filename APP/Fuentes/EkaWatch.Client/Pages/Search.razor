@@ -1,0 +1,226 @@
+@page "/search"
+@rendermode InteractiveWebAssembly
+@implements IDisposable
+@using EkaWatch.Client.Models
+@inject TmdbService Tmdb
+@inject NavigationManager Nav
+
+<style>
+    body { overflow-x: hidden; }
+</style>
+
+@if (loading)
+{
+    <div style="min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center;">
+        <div class="spinner-border text-warning" role="status"></div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(query))
+{
+    <h1 style="color: #d9e8ed; margin-bottom: 1rem; font-size: 24px; font-weight: 400; line-height: 32px; font-style: normal; ">Resultados de búsqueda para: @query</h1>
+
+    @if (filteredItems.Count == 0)
+    {
+        <div class="text-center py-5" style="color: #888;">
+            <p>No se encontraron resultados.</p>
+        </div>
+    }
+    else
+    {
+        <div style="margin-bottom: 16px;">
+            <div style="box-sizing: border-box; overflow: hidden; height: 60px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 0;">
+            <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "" ? "#2B333D" : "transparent"); color: @(mediaFilter == "" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterAll">
+                    Ver Todo
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "movie" ? "#2B333D" : "transparent"); color: @(mediaFilter == "movie" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterMovies">
+                    Películas
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "tv" ? "#2B333D" : "transparent"); color: @(mediaFilter == "tv" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterSeries">
+                    Series
+                </button>
+            </div>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <SortButton OnSortChanged="HandleSortChanged" />
+                <button class="btn btn-sm"
+                        style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
+                        @onclick="ToggleFilters">
+                    <i class="fa-solid fa-filter"></i> Filtros
+                </button>
+            </div>
+        </div>
+
+        @if (showFilters)
+        {
+            <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
+                @foreach (var opt in filterOptions)
+                {
+                    <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                          onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                        @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                    </span>
+                }
+                <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                    <i class="fa-solid fa-xmark"></i> Reinicializar
+                </span>
+            </div>
+        }
+        </div>
+
+        <div class="row g-3">
+            @foreach (var item in filteredItems)
+            {
+                <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                    <div class="card h-100" style="background: #1e1c33; border: 1px solid #2d2b4a; cursor: pointer;"
+                         @onclick="() => GoToDetail(item)">
+                        @if (!string.IsNullOrEmpty(item.PosterPath))
+                        {
+                            <img src="@GetPosterUrl(item.PosterPath)"
+                                 alt="@item.Title" class="card-img-top"
+                                 style="aspect-ratio: 2/3; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="card-img-top d-flex align-items-center justify-content-center"
+                                 style="aspect-ratio: 2/3; background: #2d2b4a;">
+                                <span style="color: #666;">Sin póster</span>
+                            </div>
+                        }
+                        <div class="card-body p-2 d-flex flex-column">
+                            <p class="card-text small mb-1" style="color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                @item.Title
+                            </p>
+                            @if (!string.IsNullOrEmpty(item.Year))
+                            {
+                                <p class="card-text small mb-1" style="color: #888;">
+                                    @item.Year
+                                </p>
+                            }
+                            <div class="mt-auto d-flex justify-content-between align-items-center">
+                                <span class="badge bg-warning text-dark">@item.VoteAverage.ToString("0.0")</span>
+                                <i class="fa-solid @(item.MediaType == "movie" ? "fa-film" : "fa-tv")" style="color: #888;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="text-center mt-4">
+            <small style="color: #666;">Mostrando @filteredItems.Count resultados</small>
+        </div>
+    }
+}
+else
+{
+    <div class="text-center py-5" style="color: #888;">
+        <p>Escribe un término de búsqueda para empezar.</p>
+    </div>
+}
+
+@code {
+    private bool loading;
+    private string query = "";
+    private string mediaFilter = "";
+    private bool showFilters;
+    private string _sortOrder = "none";
+    private readonly List<string> filterOptions =
+    [
+        "Año de estreno",
+        "Géneros",
+        "Precio",
+        "Calificación",
+        "País de producción",
+        "Duración",
+        "Clasificación por edades"
+    ];
+    private List<TmdbMediaItem> allItems = [];
+    private List<TmdbMediaItem> filteredItems
+    {
+        get
+        {
+            var f = mediaFilter == ""
+                ? allItems
+                : allItems.Where(i => i.MediaType == mediaFilter).ToList();
+            return _sortOrder switch
+            {
+                "asc" => f.OrderBy(i => i.Title).ToList(),
+                "desc" => f.OrderByDescending(i => i.Title).ToList(),
+                _ => f
+            };
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFromQuery();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await LoadFromQuery();
+        StateHasChanged();
+    }
+
+    private async Task LoadFromQuery()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var qParam = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("q");
+        if (!string.IsNullOrEmpty(qParam))
+            await ExecuteSearch(qParam);
+    }
+
+    private async Task ExecuteSearch(string term)
+    {
+        query = term;
+        loading = true;
+        try
+        {
+            var results = await Tmdb.SearchAsync(term);
+            allItems = results.Where(i => i.MediaType == "movie" || i.MediaType == "tv").ToList();
+        }
+        catch
+        {
+            allItems = [];
+        }
+        loading = false;
+    }
+
+    private static string GetPosterUrl(string? posterPath)
+    {
+        return $"https://image.tmdb.org/t/p/w342{posterPath}";
+    }
+
+    private void FilterAll() { mediaFilter = ""; }
+    private void FilterMovies() { mediaFilter = "movie"; }
+    private void FilterSeries() { mediaFilter = "tv"; }
+
+    private void ToggleFilters() => showFilters = !showFilters;
+
+    private void HandleSortChanged(string order)
+    {
+        _sortOrder = order;
+    }
+
+    private void GoToDetail(TmdbMediaItem item)
+    {
+        Nav.NavigateTo($"/media/{item.MediaType}/{item.Id}");
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

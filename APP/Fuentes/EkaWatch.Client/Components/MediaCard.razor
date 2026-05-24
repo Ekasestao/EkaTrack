@@ -1,0 +1,89 @@
+@inject NavigationManager Nav
+
+<div style="position: relative; overflow: hidden; background: #1e1c33; border-radius: 4px; cursor: pointer;"
+     @onmouseenter="StartHover" @onmouseleave="EndHover"
+     @onclick="() => Nav.NavigateTo(DetailUrl)">
+
+    @if (!string.IsNullOrEmpty(PosterPath))
+    {
+        <img src="@PosterUrl"
+             alt="@Title"
+             style="width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover;" />
+    }
+    else
+    {
+        <div style="aspect-ratio: 2/3; background: #2d2b4a; display: flex; align-items: center; justify-content: center;">
+            <span style="color: #666;">Sin póster</span>
+        </div>
+    }
+
+    @{
+        var anyActive = IsLiked || IsDisliked || IsInAnyList || IsWatched;
+    }
+
+    <div @onclick:stopPropagation
+         style="position: absolute; top: 0; left: 0; right: 0;
+                display: flex; justify-content: space-between; padding: 8px;
+                background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent);
+                opacity: @(hover || anyActive ? "1" : "0");
+                transition: opacity 0.3s ease-in-out;
+                pointer-events: @(hover || anyActive ? "auto" : "none");">
+        <button @onclick="() => OnOpenLists.InvokeAsync()"
+                title="Añadir a lista"
+                style="@BtnCircle(IsInAnyList, hover)">
+            <i class="fa-solid fa-bookmark" style="font-size: 13px;"></i>
+        </button>
+        <button @onclick="() => OnToggleWatched.InvokeAsync()"
+                title="Visto"
+                style="@BtnCircle(IsWatched, hover)">
+            <i class="fa-solid fa-check" style="font-size: 13px;"></i>
+        </button>
+        <button @onclick="() => OnToggleLiked.InvokeAsync()"
+                title="Me gusta"
+                style="@BtnCircle(IsLiked, hover)">
+            <i class="fa-solid fa-thumbs-up" style="font-size: 13px;"></i>
+        </button>
+        <button @onclick="() => OnToggleDisliked.InvokeAsync()"
+                title="No me gusta"
+                style="@BtnCircle(IsDisliked, hover)">
+            <i class="fa-solid fa-thumbs-down" style="font-size: 13px;"></i>
+        </button>
+    </div>
+</div>
+
+@code {
+    private bool hover;
+    private void StartHover() => hover = true;
+    private void EndHover() => hover = false;
+
+    [Parameter] public int Id { get; set; }
+    [Parameter] public string MediaType { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? PosterPath { get; set; }
+
+    [Parameter] public bool IsLiked { get; set; }
+    [Parameter] public bool IsDisliked { get; set; }
+    [Parameter] public bool IsInAnyList { get; set; }
+    [Parameter] public bool IsWatched { get; set; }
+
+    [Parameter] public EventCallback OnToggleLiked { get; set; }
+    [Parameter] public EventCallback OnToggleDisliked { get; set; }
+    [Parameter] public EventCallback OnOpenLists { get; set; }
+    [Parameter] public EventCallback OnToggleWatched { get; set; }
+
+    [Parameter] public string PosterSize { get; set; } = "w342";
+
+    private string DetailUrl => $"/media/{MediaType}/{Id}";
+    private string PosterUrl => $"https://image.tmdb.org/t/p/{PosterSize}{PosterPath}";
+
+    private string BtnCircle(bool active, bool isHovering)
+    {
+        var color = active ? "#cea235" : "#fff";
+        var opacity = active ? "1" : (isHovering ? "0.85" : "0");
+        var pointerEvents = !active && !isHovering ? "pointer-events: none;" : "";
+        return $"background: rgba(0,0,0,0.8); border: none; color: {color}; {pointerEvents} transition: all 0.3s ease-in-out; " +
+               $"width: 34px; height: 34px; border-radius: 50%; " +
+               $"display: flex; align-items: center; justify-content: center; " +
+               $"cursor: pointer; opacity: {opacity};";
+    }
+}
