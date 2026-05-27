@@ -11,7 +11,9 @@
 @inject TvmazeService Tvmaze
 
 <style>
-    body { overflow-x: hidden; }
+    body {
+        overflow-x: hidden;
+    }
 </style>
 
 <div class="mb-4">
@@ -20,51 +22,50 @@
 
 <div style="margin-bottom: 16px;">
     <div style="box-sizing: border-box; overflow: hidden; height: 60px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 0;">
-    <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
-        <a href="/" class="btn btn-sm"
-           style="background-color: @(currentSection == "" ? "#2B333D" : "transparent"); color: @(currentSection == "" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;">
-            Ver Todo
-        </a>
-        <a href="/?media_type=movie"
-           class="btn btn-sm"
-           style="background-color: @(currentSection == "movie" ? "#2B333D" : "transparent"); color: @(currentSection == "movie" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;">
-            Películas
-        </a>
-        <a href="/?media_type=tv"
-           class="btn btn-sm"
-           style="background-color: @(currentSection == "tv" ? "#2B333D" : "transparent"); color: @(currentSection == "tv" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;">
-            Series
-        </a>
-    </div>
-    <span style="margin-left: 10px; color: #aaa; font-size: 14px;">
-        @allItems.Count títulos
-    </span>
-    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-        <SortButton OnSortChanged="HandleSortChanged" />
-        <button class="btn btn-sm"
-                style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
-                @onclick="ToggleFilters">
-            <i class="fa-solid fa-filter"></i> Filtros
-        </button>
-    </div>
-</div>
-
-@if (showFilters)
-{
-    <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
-        @foreach (var opt in filterOptions)
-        {
-            <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                  onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
-            </span>
-        }
-        <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-              onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-            <i class="fa-solid fa-xmark"></i> Reinicializar
+        <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
+            <NavLink href="" Match="NavLinkMatch.All" class="btn btn-sm" style="@($"background-color: {(currentSection == "" ? "#2B333D" : "transparent")}; color: {(currentSection == "" ? "#cea235" : "#ddd")}; border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;")">
+                Ver Todo
+            </NavLink>
+            <NavLink href="?media_type=movie"
+                     class="btn btn-sm"
+                     style="@($"background-color: {(currentSection == "movie" ? "#2B333D" : "transparent")}; color: {(currentSection == "movie" ? "#cea235" : "#ddd")}; border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;")">
+                Películas
+            </NavLink>
+            <NavLink href="?media_type=tv"
+                     class="btn btn-sm"
+                     style="@($"background-color: {(currentSection == "tv" ? "#2B333D" : "transparent")}; color: {(currentSection == "tv" ? "#cea235" : "#ddd")}; border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;")">
+                Series
+            </NavLink>
+        </div>
+        <span style="margin-left: 10px; color: #aaa; font-size: 14px;">
+            @allItems.Count títulos
         </span>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+            <SortButton OnSortChanged="HandleSortChanged" />
+            <button class="btn btn-sm"
+                    style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
+                    @onclick="ToggleFilters">
+                <i class="fa-solid fa-filter"></i> Filtros
+            </button>
+        </div>
     </div>
-}
+
+    @if (showFilters)
+    {
+        <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
+            @foreach (var opt in filterOptions)
+            {
+                <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                    @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                </span>
+            }
+            <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                  onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                <i class="fa-solid fa-xmark"></i> Reinicializar
+            </span>
+        </div>
+    }
 </div>
 
 @if (loading && allItems.Count == 0)
@@ -623,7 +624,7 @@ else
 
     private void GoToDetail(TmdbMediaItem item)
     {
-        Nav.NavigateTo($"/media/{item.MediaType}/{item.Id}");
+        Nav.NavigateTo($"media/{item.MediaType}/{item.Id}");
     }
 
     public async ValueTask DisposeAsync()

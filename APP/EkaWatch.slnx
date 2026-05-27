@@ -1,5 +1,4 @@
 <Solution>
   <Project Path="Fuentes/EkaWatch.Client/EkaWatch.Client.csproj" />
-  <Project Path="Fuentes/EkaWatch/EkaWatch.csproj" />
   <Project Path="Fuentes/EkaWatch.Tests/EkaWatch.Tests.csproj" />
 </Solution>

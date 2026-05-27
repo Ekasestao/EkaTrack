@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
@@ -20,26 +22,14 @@ jobs:
       - name: Test
         run: dotnet test APP/Fuentes/EkaWatch.Tests/EkaWatch.Tests.csproj -c Release
 
-      - name: Check wwwroot source (IMPORTANT)
-        run: find APP/Fuentes/EkaWatch.Client/wwwroot -type f | sort | head -50
-
-      - name: Set base href
-        run: sed -i 's|<base href="/" />|<base href="/EkaWatch/" />|g' APP/Fuentes/EkaWatch.Client/wwwroot/index.html
-
       - name: Publish
         run: dotnet publish APP/Fuentes/EkaWatch.Client/EkaWatch.Client.csproj -c Release -o release --nologo
-
-      - name: Check publish output (lib + bootstrap)
-        run: find release/wwwroot -type f | grep -i bootstrap || echo "NO BOOTSTRAP FOUND IN PUBLISH"
-
-      - name: Show lib folder (safe)
-        run: find release/wwwroot/lib -type f || echo "NO LIB FOLDER IN PUBLISH OUTPUT"
 
       - name: Fix SPA routing
         run: cp release/wwwroot/index.html release/wwwroot/404.html
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: release/wwwroot

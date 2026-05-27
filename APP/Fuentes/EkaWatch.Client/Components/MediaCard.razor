@@ -73,7 +73,7 @@
 
     [Parameter] public string PosterSize { get; set; } = "w342";
 
-    private string DetailUrl => $"/media/{MediaType}/{Id}";
+    private string DetailUrl => $"media/{MediaType}/{Id}";
     private string PosterUrl => $"https://image.tmdb.org/t/p/{PosterSize}{PosterPath}";
 
     private string BtnCircle(bool active, bool isHovering)

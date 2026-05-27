@@ -9,7 +9,9 @@
 @inject TvmazeService Tvmaze
 
 <style>
-    body { overflow-x: hidden; }
+    body {
+        overflow-x: hidden;
+    }
 </style>
 
 <div class="mb-4">
@@ -20,7 +22,7 @@
 {
     <div class="text-center py-5">
         <p>Inicia sesión para ver tus listas</p>
-        <RadzenButton Text="Iniciar sesión" Click="@(() => Nav.NavigateTo("/login"))" />
+        <RadzenButton Text="Iniciar sesión" Click="@(() => Nav.NavigateTo("login"))" />
     </div>
     return;
 }
@@ -107,52 +109,52 @@
 {
     <div style="margin-bottom: 16px;">
         <div style="box-sizing: border-box; overflow: hidden; height: 60px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 0;">
-        <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
-            <button class="btn btn-sm"
-                    style="background-color: @(mediaFilter == "" ? "#2B333D" : "transparent"); color: @(mediaFilter == "" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
-                    @onclick="FilterAll">
-                Ver Todo
-            </button>
-            <button class="btn btn-sm"
-                    style="background-color: @(mediaFilter == "movie" ? "#2B333D" : "transparent"); color: @(mediaFilter == "movie" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
-                    @onclick="FilterMovies">
-                Películas
-            </button>
-            <button class="btn btn-sm"
-                    style="background-color: @(mediaFilter == "tv" ? "#2B333D" : "transparent"); color: @(mediaFilter == "tv" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
-                    @onclick="FilterSeries">
-                Series
-            </button>
-        </div>
-        <span style="margin-left: 10px; color: #aaa; font-size: 14px;">
-            @GetFilteredCount() títulos
-        </span>
-        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-            <SortButton OnSortChanged="HandleSortChanged" />
-            <button class="btn btn-sm"
-                    style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
-                    @onclick="ToggleFilters">
-                <i class="fa-solid fa-filter"></i> Filtros
-            </button>
-        </div>
-    </div>
-
-    @if (showFilters)
-    {
-        <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
-            @foreach (var opt in filterOptions)
-            {
-                <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                    @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
-                </span>
-            }
-            <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                  onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                <i class="fa-solid fa-xmark"></i> Reinicializar
+            <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "" ? "#2B333D" : "transparent"); color: @(mediaFilter == "" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterAll">
+                    Ver Todo
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "movie" ? "#2B333D" : "transparent"); color: @(mediaFilter == "movie" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterMovies">
+                    Películas
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "tv" ? "#2B333D" : "transparent"); color: @(mediaFilter == "tv" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterSeries">
+                    Series
+                </button>
+            </div>
+            <span style="margin-left: 10px; color: #aaa; font-size: 14px;">
+                @GetFilteredCount() títulos
             </span>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <SortButton OnSortChanged="HandleSortChanged" />
+                <button class="btn btn-sm"
+                        style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
+                        @onclick="ToggleFilters">
+                    <i class="fa-solid fa-filter"></i> Filtros
+                </button>
+            </div>
         </div>
-    }
+
+        @if (showFilters)
+        {
+            <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
+                @foreach (var opt in filterOptions)
+                {
+                    <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                          onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                        @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                    </span>
+                }
+                <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                    <i class="fa-solid fa-xmark"></i> Reinicializar
+                </span>
+            </div>
+        }
     </div>
 
     @if (isCustomListView)
@@ -201,8 +203,8 @@
                            IsWatched="_watchedKeys.Contains(key)"
                            OnToggleLiked="() => ToggleLikedItem(item)"
                            OnToggleDisliked="() => ToggleDislikedItem(item)"
-                            OnOpenLists="() => OpenListSelector(item)"
-                            OnToggleWatched="() => ToggleWatchedItem(item)" />
+                           OnOpenLists="() => OpenListSelector(item)"
+                           OnToggleWatched="() => ToggleWatchedItem(item)" />
             }
         </div>
     }
@@ -415,35 +417,37 @@
                                     @item.Title
                                 </div>
                                 <div style="color: #888; font-size: 11px;">
-                                    @(item.MediaType == "movie" ? "Película" : "Serie") @if (!string.IsNullOrEmpty(item.Year)) { <span>· @item.Year</span> }
-                                </div>
-                            </div>
-                            <div style="width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                                @if (isSelected)
-                                {
-                                    <div style="width: 18px; height: 18px; background: #cea235; border-radius: 2px; display: flex; align-items: center; justify-content: center;">
-                                        <i class="fa-solid fa-check" style="color: #060D17; font-size: 12px;"></i>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <i class="fa-regular fa-square" style="color: #555; font-size: 18px;"></i>
+                                    @(item.MediaType == "movie" ? "Película" : "Serie") @if (!string.IsNullOrEmpty(item.Year)) {
+                                    <span>· @item.Year</span>
                                 }
                             </div>
                         </div>
-                    }
+                        <div style="width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                            @if (isSelected)
+                            {
+                                <div style="width: 18px; height: 18px; background: #cea235; border-radius: 2px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fa-solid fa-check" style="color: #060D17; font-size: 12px;"></i>
+                                </div>
+                            }
+                            else
+                            {
+                                <i class="fa-regular fa-square" style="color: #555; font-size: 18px;"></i>
+                            }
+                        </div>
+                    </div>
                 }
-            </div>
+            }
+        </div>
 
-            <div style="padding: 16px 0 0; display: flex; justify-content: center; flex-shrink: 0;">
-                <button @onclick="HandleAddTitles"
-                        disabled="@(addTitlesLoading)"
-                        style="width: 100%; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(addTitlesLoading ? "0.5" : "1");">
-                    Listo
-                </button>
-            </div>
+        <div style="padding: 16px 0 0; display: flex; justify-content: center; flex-shrink: 0;">
+            <button @onclick="HandleAddTitles"
+                    disabled="@(addTitlesLoading)"
+                    style="width: 100%; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(addTitlesLoading ? "0.5" : "1");">
+                Listo
+            </button>
         </div>
     </div>
+</div>
 }
 
 @if (showCustomModal && _listSelectorItem is not null)
@@ -666,7 +670,7 @@
         {
             allLists = [];
             await AuthService.LogoutAsync();
-            Nav.NavigateTo("/login");
+            Nav.NavigateTo("login");
             return;
         }
 
@@ -718,7 +722,7 @@
         selectedListId = id;
         mediaFilter = "";
         currentListName = allLists.FirstOrDefault(l => l.Id == id)?.Name ?? "";
-        Nav.NavigateTo($"/listas?inner_tab=custom_lists&list_id={id}");
+        Nav.NavigateTo($"listas?inner_tab=custom_lists&list_id={id}");
         _ = Reload();
     }
 
@@ -727,7 +731,7 @@
         activeTab = tab;
         selectedListId = null;
         mediaFilter = "";
-        Nav.NavigateTo(tab == "" ? "/listas" : $"/listas?inner_tab={tab}");
+        Nav.NavigateTo(tab == "" ? "listas" : $"listas?inner_tab={tab}");
         _ = Reload();
     }
 
@@ -1064,7 +1068,7 @@
 
     private void GoToDetail(ListItemModel item)
     {
-        Nav.NavigateTo($"/media/{item.MediaType}/{item.TmdbId}");
+        Nav.NavigateTo($"media/{item.MediaType}/{item.TmdbId}");
     }
 
     private int GetListCount(string listType) =>
@@ -1120,7 +1124,7 @@
                 addTitlesItemIds[$"{i.TmdbId}:{i.MediaType}"] = i.Id;
             var trending = await Tmdb.GetTrendingAsync();
             _addTitlesTrendingCache = trending.Where(i => i.MediaType == "movie" || i.MediaType == "tv").Take(20).ToList();
-            addTitlesResults = [.._addTitlesTrendingCache];
+            addTitlesResults = [.. _addTitlesTrendingCache];
             MarkResultsInList();
         }
         catch { }
@@ -1138,7 +1142,7 @@
         _addTitlesCts?.Cancel();
         if (addTitlesSearch.Length < 3)
         {
-            addTitlesResults = [.._addTitlesTrendingCache];
+            addTitlesResults = [.. _addTitlesTrendingCache];
             MarkResultsInList();
             return;
         }

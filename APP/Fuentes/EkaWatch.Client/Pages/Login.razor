@@ -1,34 +1,166 @@
 ﻿@page "/login"
+@rendermode InteractiveWebAssembly
 @inject AuthService AuthService
 @inject NavigationManager Nav
 
-<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
-    <div style="width: 100%; max-width: 400px;">
-        <RadzenCard>
-            <h3 class="mb-4">Iniciar sesión</h3>
+<div class="login-wrapper">
+    <div class="login-card">
+        <div class="login-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        </div>
 
-            @if (!string.IsNullOrEmpty(errorMessage))
+        <h2 class="login-title">Acceso</h2>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="login-error">@errorMessage</div>
+        }
+
+        <div class="login-field">
+            <label for="credential">Usuario o correo</label>
+            <input id="credential" type="text" @bind="credential" @bind:event="oninput" placeholder="usuario@ejemplo.com" />
+        </div>
+
+        <div class="login-field">
+            <label for="password">Contraseña</label>
+            <input id="password" type="password" @bind="password" @bind:event="oninput" placeholder="••••••••" />
+        </div>
+
+        <button class="login-button" @onclick="HandleLogin" disabled="@loading">
+            @if (loading)
             {
-                <RadzenAlert AlertStyle="AlertStyle.Danger" class="mb-3">@errorMessage</RadzenAlert>
+                <span class="spinner"></span>
             }
-
-            <RadzenFormField Text="Usuario o email" class="w-100 mb-3">
-                <RadzenTextBox @bind-Value="credential" class="w-100" />
-            </RadzenFormField>
-
-            <RadzenFormField Text="Contraseña" class="w-100 mb-4">
-                <RadzenPassword @bind-Value="password" class="w-100" />
-            </RadzenFormField>
-
-            <RadzenButton Text="Entrar" ButtonStyle="ButtonStyle.Primary" class="w-100 mb-3"
-                          Click="HandleLogin" IsBusy="loading" />
-
-            <p class="text-center mt-2">
-                ¿No tienes cuenta? <a href="/register">Regístrate</a>
-            </p>
-        </RadzenCard>
+            @if (!loading)
+            {
+                <span>Entrar</span>
+            }
+        </button>
     </div>
 </div>
+
+<style>
+    .login-wrapper {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f4f6;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .login-card {
+        background: white;
+        border-radius: 16px;
+        padding: 40px 36px;
+        width: 100%;
+        max-width: 380px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        box-sizing: border-box;
+    }
+
+    .login-icon {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 16px;
+    }
+
+    .login-title {
+        text-align: center;
+        margin: 0 0 24px 0;
+        font-size: 22px;
+        font-weight: 600;
+        color: #374151;
+        font-family: inherit;
+    }
+
+    .login-error {
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 13px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        text-align: center;
+    }
+
+    .login-field {
+        margin-bottom: 18px;
+    }
+
+    .login-field label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #6b7280;
+        margin-bottom: 6px;
+    }
+
+    .login-field input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #374151;
+        background: #f9fafb;
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .login-field input:focus {
+        border-color: #9ca3af;
+        box-shadow: 0 0 0 3px rgba(107,114,128,0.12);
+        background: white;
+    }
+
+    .login-field input::placeholder {
+        color: #9ca3af;
+    }
+
+    .login-button {
+        width: 100%;
+        padding: 11px 0;
+        border: none;
+        border-radius: 8px;
+        background: #374151;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: inherit;
+    }
+
+    .login-button:hover {
+        background: #1f2937;
+    }
+
+    .login-button:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
 
 @code {
     private string credential = "";
@@ -40,7 +172,7 @@
     {
         await AuthService.InitAsync();
         if (AuthService.IsLoggedIn)
-            Nav.NavigateTo("/");
+            Nav.NavigateTo("");
     }
 
     private async Task HandleLogin()
@@ -51,7 +183,7 @@
         var success = await AuthService.LoginAsync(credential, password);
 
         if (success)
-            Nav.NavigateTo("/");
+            Nav.NavigateTo("");
         else
             errorMessage = "Credenciales incorrectas. Inténtalo de nuevo.";
 

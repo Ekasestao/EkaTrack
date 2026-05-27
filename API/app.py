@@ -17,7 +17,11 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 CORS(
     app,
     supports_credentials=True,
-    origins=["https://localhost:7094"],
+    origins=[
+        "https://localhost:7094",
+        "http://localhost:7094/",
+        "https://ekasestao.github.io",
+    ],
     allow_headers=["Content-Type", "Authorization", "X-User-Id"],
 )
 
@@ -27,9 +31,8 @@ TVMAZE_BASE_URL = api_url_tvmaze
 DATABASE = database
 
 # ─── TMDB Cache (5 min TTL) ────────────────────────────────────────────────
-import time
-
 _tmdb_cache = {}
+
 
 def tmdb_get(url, params=None, timeout=15):
     cache_key = f"{url}|{json.dumps(params, sort_keys=True) if params else ''}"
@@ -41,10 +44,12 @@ def tmdb_get(url, params=None, timeout=15):
     _tmdb_cache[cache_key] = {"response": resp, "time": now}
     return resp
 
+
 def tmdb_get_json(url, params=None, timeout=15):
     r = tmdb_get(url, params, timeout)
     r.raise_for_status()
     return r.json()
+
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -165,47 +170,7 @@ def health():
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.json
-    username = data.get("username", "").strip()
-    email = data.get("email", "").strip()
-    password = data.get("password", "")
-    same_password = data.get("same_password", "")
-
-    if not username:
-        return jsonify({"status": 400, "message": "Username requerido"}), 400
-    if not email:
-        return jsonify({"status": 400, "message": "Email requerido"}), 400
-    if not password:
-        return jsonify({"status": 400, "message": "Password requerido"}), 400
-    if password != same_password:
-        return jsonify({"status": 400, "message": "Las contraseñas no coinciden"}), 400
-
-    hashed_pw = generate_password_hash(password)
-
-    try:
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-            (username, email, hashed_pw),
-        )
-        conn.commit()
-        user = conn.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
-        ).fetchone()
-        session["user_id"] = user["id"]
-        session["username"] = user["username"]
-        conn.close()
-
-        ensure_default_lists(user["id"])
-
-        return jsonify(
-            {
-                "status": 200,
-                "user": {"id": user["id"], "username": username, "email": email},
-            }
-        )
-    except sqlite3.IntegrityError:
-        return jsonify({"status": 409, "message": "Username o email ya en uso"}), 409
+    return jsonify({"status": 403, "message": "Registro cerrado"}), 403
 
 
 @app.route("/login", methods=["POST"])
@@ -361,22 +326,40 @@ def media_detail(media_type, tmdb_id):
 
     # ─── TMDB duplicate fallback: TVmaze chain ───────────────────────────
     def _tvm_status(s):
-        return {"Running": "Returning Series", "Ended": "Ended", "To Be Determined": "Planned", "In Development": "In Production"}.get(s, s)
+        return {
+            "Running": "Returning Series",
+            "Ended": "Ended",
+            "To Be Determined": "Planned",
+            "In Development": "In Production",
+        }.get(s, s)
 
     def _is_incomplete(d):
-        if not d.get("overview"): return True
-        if not d.get("poster_path"): return True
-        if not d.get("vote_average"): return True
+        if not d.get("overview"):
+            return True
+        if not d.get("poster_path"):
+            return True
+        if not d.get("vote_average"):
+            return True
         if media_type == "tv":
             real = [s for s in d.get("seasons", []) if s.get("season_number", 0) > 0]
-            if not real: return True
+            if not real:
+                return True
         return False
 
     if _is_incomplete(data):
-        search_terms = list(dict.fromkeys(filter(None, [
-            data.get("original_title"), data.get("original_name"),
-            data.get("title"), data.get("name"),
-        ])))
+        search_terms = list(
+            dict.fromkeys(
+                filter(
+                    None,
+                    [
+                        data.get("original_title"),
+                        data.get("original_name"),
+                        data.get("title"),
+                        data.get("name"),
+                    ],
+                )
+            )
+        )
 
         # Add TMDB alternative titles (often Latin script for non-Latin entries)
         try:
@@ -395,7 +378,8 @@ def media_detail(media_type, tmdb_id):
         tvmaze_show = None
         tvmaze_headers = {"Accept-Language": "es"}
         for term in search_terms:
-            if tvmaze_show: break
+            if tvmaze_show:
+                break
             try:
                 r = requests.get(
                     f"{TVMAZE_BASE_URL}/singlesearch/shows",
@@ -432,7 +416,9 @@ def media_detail(media_type, tmdb_id):
                 cc = network.get("country", {}).get("code")
                 if cc:
                     data["origin_country"] = [cc]
-                    data["production_countries"] = [{"iso_3166_1": cc, "name": network["country"].get("name", "")}]
+                    data["production_countries"] = [
+                        {"iso_3166_1": cc, "name": network["country"].get("name", "")}
+                    ]
 
     VALID_ES_CERTS = {"APTA", "7", "12", "16", "18", "X"}
 
@@ -552,7 +538,9 @@ def tvmaze_show(tmdb_id):
     if imdb_id:
         try:
             lookup_resp = requests.get(
-                f"{TVMAZE_BASE_URL}/lookup/shows", params={"imdb": imdb_id}, headers=tvmaze_headers
+                f"{TVMAZE_BASE_URL}/lookup/shows",
+                params={"imdb": imdb_id},
+                headers=tvmaze_headers,
             )
             if lookup_resp.ok:
                 tvmaze_show = lookup_resp.json()
@@ -567,7 +555,11 @@ def tvmaze_show(tmdb_id):
             )
             name = detail_data.get("name", "")
             first_air_date = detail_data.get("first_air_date", "")
-            year = first_air_date[:4] if first_air_date and len(first_air_date) >= 4 else None
+            year = (
+                first_air_date[:4]
+                if first_air_date and len(first_air_date) >= 4
+                else None
+            )
             if name:
                 # Try searching with name fragments (e.g., after ":")
                 search_names = [name]
@@ -610,11 +602,15 @@ def tvmaze_show(tmdb_id):
                             timeout=10,
                         )
                         if search_resp.ok:
-                            results = search_resp.json()  # list of {"score": ..., "show": {...}}
+                            results = (
+                                search_resp.json()
+                            )  # list of {"score": ..., "show": {...}}
                             for result in results:
                                 show = result.get("show", {})
                                 if year:
-                                    premiered = show.get("premiered", "")  # "YYYY-MM-DD"
+                                    premiered = show.get(
+                                        "premiered", ""
+                                    )  # "YYYY-MM-DD"
                                     show_year = premiered[:4] if premiered else None
                                     if show_year and show_year != year:
                                         continue
@@ -632,7 +628,9 @@ def tvmaze_show(tmdb_id):
 
     # 3. Fetch seasons from TVmaze
     try:
-        seasons_resp = requests.get(f"{TVMAZE_BASE_URL}/shows/{tvmaze_id}/seasons", headers=tvmaze_headers)
+        seasons_resp = requests.get(
+            f"{TVMAZE_BASE_URL}/shows/{tvmaze_id}/seasons", headers=tvmaze_headers
+        )
         if not seasons_resp.ok:
             return jsonify({"tvmaze_id": tvmaze_id, "seasons": []})
         seasons_data = seasons_resp.json()
@@ -651,10 +649,12 @@ def tvmaze_show(tmdb_id):
     conn.close()
 
     # 5. Fetch Spanish episode names + ratings from TMDB (by airdate + by season/ep)
-    tmdb_by_date = {}    # airdate -> {ep_num: {"name": ..., "vote_average": ...}}
+    tmdb_by_date = {}  # airdate -> {ep_num: {"name": ..., "vote_average": ...}}
     tmdb_by_season = {}  # season_num -> {ep_num: ...}
     try:
-        max_tmdb_seasons = max((s.get("number", 0) for s in seasons_data), default=0) + 5
+        max_tmdb_seasons = (
+            max((s.get("number", 0) for s in seasons_data), default=0) + 5
+        )
         for s in range(1, max_tmdb_seasons + 1):
             season_data = tmdb_get_json(
                 f"{TMDB_BASE_URL}/tv/{tmdb_id}/season/{s}",
@@ -703,7 +703,10 @@ def tvmaze_show(tmdb_id):
 
         episodes = []
         try:
-            ep_resp = requests.get(f"{TVMAZE_BASE_URL}/seasons/{season_id}/episodes", headers=tvmaze_headers)
+            ep_resp = requests.get(
+                f"{TVMAZE_BASE_URL}/seasons/{season_id}/episodes",
+                headers=tvmaze_headers,
+            )
             if ep_resp.ok:
                 for ep in ep_resp.json():
                     ep_num = ep.get("number")
@@ -716,8 +719,16 @@ def tvmaze_show(tmdb_id):
                             "tvmaze_episode_id": ep["id"],
                             "season_number": ep.get("season", season_number),
                             "episode_number": ep_num,
-                            "name": tmdb_info.get("name") if tmdb_info else ep.get("name", ""),
-                            "vote_average": tmdb_info.get("vote_average") if tmdb_info else (ep.get("rating") or {}).get("average"),
+                            "name": (
+                                tmdb_info.get("name")
+                                if tmdb_info
+                                else ep.get("name", "")
+                            ),
+                            "vote_average": (
+                                tmdb_info.get("vote_average")
+                                if tmdb_info
+                                else (ep.get("rating") or {}).get("average")
+                            ),
                             "still_url": (
                                 ep.get("image", {}).get("medium")
                                 if ep.get("image")
@@ -794,37 +805,41 @@ def _tvmaze_fallback(tmdb_id):
                     if ep_num is None:
                         continue
                     syn_id = -(tmdb_id * 10000000 + season_number * 10000 + ep_num)
-                    episodes.append({
-                        "tvmaze_episode_id": syn_id,
-                        "season_number": season_number,
-                        "episode_number": ep_num,
-                        "name": ep.get("name", ""),
-                        "vote_average": ep.get("vote_average"),
-                        "still_url": (
-                            f"https://image.tmdb.org/t/p/w300{ep['still_path']}"
-                            if ep.get("still_path")
-                            else None
-                        ),
-                        "air_date": ep.get("air_date", ""),
-                        "runtime": ep.get("runtime"),
-                        "summary": ep.get("overview", ""),
-                        "watched": syn_id in watched_fallback,
-                    })
+                    episodes.append(
+                        {
+                            "tvmaze_episode_id": syn_id,
+                            "season_number": season_number,
+                            "episode_number": ep_num,
+                            "name": ep.get("name", ""),
+                            "vote_average": ep.get("vote_average"),
+                            "still_url": (
+                                f"https://image.tmdb.org/t/p/w300{ep['still_path']}"
+                                if ep.get("still_path")
+                                else None
+                            ),
+                            "air_date": ep.get("air_date", ""),
+                            "runtime": ep.get("runtime"),
+                            "summary": ep.get("overview", ""),
+                            "watched": syn_id in watched_fallback,
+                        }
+                    )
             except:
                 pass
 
-            result_seasons.append({
-                "tvmaze_season_id": 0,
-                "season_number": season_number,
-                "name": s.get("name", "") or f"Temporada {season_number}",
-                "episode_count": s.get("episode_count", 0),
-                "poster_url": (
-                    f"https://image.tmdb.org/t/p/w200{s['poster_path']}"
-                    if s.get("poster_path")
-                    else None
-                ),
-                "episodes": episodes,
-            })
+            result_seasons.append(
+                {
+                    "tvmaze_season_id": 0,
+                    "season_number": season_number,
+                    "name": s.get("name", "") or f"Temporada {season_number}",
+                    "episode_count": s.get("episode_count", 0),
+                    "poster_url": (
+                        f"https://image.tmdb.org/t/p/w200{s['poster_path']}"
+                        if s.get("poster_path")
+                        else None
+                    ),
+                    "episodes": episodes,
+                }
+            )
 
         return jsonify({"tvmaze_id": 0, "seasons": result_seasons})
     except:
@@ -900,7 +915,14 @@ def toggle_episode_batch():
                 conn.execute(
                     """INSERT INTO episode_tracking (user_id, tvmaze_episode_id, season_number, episode_number, show_title, watched, watched_at)
                        VALUES (?, ?, ?, ?, ?, 1, ?)""",
-                    (user_id, tvmaze_id, ep.get("season_number", 0), ep.get("episode_number", 0), ep.get("show_title", ""), now),
+                    (
+                        user_id,
+                        tvmaze_id,
+                        ep.get("season_number", 0),
+                        ep.get("episode_number", 0),
+                        ep.get("show_title", ""),
+                        now,
+                    ),
                 )
     conn.commit()
     conn.close()
