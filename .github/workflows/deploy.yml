@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main
+      - deploy
 
 jobs:
   deploy:
@@ -16,11 +16,20 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Test
+        run: dotnet test APP/Fuentes/EkaWatch.Tests/EkaWatch.Tests.csproj -c Release
+
+      - name: Set base href
+        run: sed -i 's|<base href="/" />|<base href="/EkaWatch/" />|g' APP/Fuentes/EkaWatch.Client/wwwroot/index.html
+
       - name: Publish
         run: dotnet publish APP/Fuentes/EkaWatch.Client/EkaWatch.Client.csproj -c Release -o release --nologo
 
-      - name: List output
-        run: find release -type f | head -50
+      - name: List lib
+        run: find release/wwwroot/lib -type f 2>&1 | head -20
+
+      - name: Fix SPA routing
+        run: cp release/wwwroot/index.html release/wwwroot/404.html
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

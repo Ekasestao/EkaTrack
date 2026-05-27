@@ -4,6 +4,9 @@ using Radzen;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
+builder.RootComponents.Add<EkaWatch.Client.Routes>("#app");
+builder.RootComponents.Add<Microsoft.AspNetCore.Components.Web.HeadOutlet>("head::after");
+
 builder.Services.AddRadzenComponents();
 
 builder.Services.AddScoped(sp => new HttpClient
