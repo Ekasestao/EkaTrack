@@ -20,10 +20,10 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Test
-        run: dotnet test APP/Fuentes/EkaWatch.Tests/EkaWatch.Tests.csproj -c Release
+        run: dotnet test APP/Fuentes/EkaTrack.Tests/EkaTrack.Tests.csproj -c Release
 
       - name: Publish
-        run: dotnet publish APP/Fuentes/EkaWatch.Client/EkaWatch.Client.csproj -c Release -o release --nologo
+        run: dotnet publish APP/Fuentes/EkaTrack.Client/EkaTrack.Client.csproj -c Release -o release --nologo
 
       - name: Fix SPA routing
         run: cp release/wwwroot/index.html release/wwwroot/404.html

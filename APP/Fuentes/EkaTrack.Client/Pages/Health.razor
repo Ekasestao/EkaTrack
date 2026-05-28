@@ -1,0 +1,22 @@
+@page "/health"
+@rendermode InteractiveWebAssembly
+@inject HttpClient Http
+@inject AuthService AuthService
+
+<h3>@healthMessage</h3>
+
+@code {
+    private string healthMessage = "Conectando...";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await Http.GetFromJsonAsync<HealthResponse>("/");
+        healthMessage = response?.Message ?? "Sin respuesta";
+    }
+
+    private class HealthResponse
+    {
+        public string Message { get; set; } = "";
+        public int Status { get; set; }
+    }
+}

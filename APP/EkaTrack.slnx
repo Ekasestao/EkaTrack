@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Fuentes/EkaTrack.Client/EkaTrack.Client.csproj" />
+  <Project Path="Fuentes/EkaTrack.Tests/EkaTrack.Tests.csproj" />
+</Solution>

@@ -1,0 +1,1123 @@
+@page "/media/{type}/{id:int}"
+@rendermode InteractiveWebAssembly
+@using EkaTrack.Client.Models
+@inject TmdbService Tmdb
+@inject ListsService ListsService
+@inject TvmazeService Tvmaze
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<style>
+    body {
+        overflow-x: hidden;
+    }
+    .hero-nav-btn {
+        background-color: #111924 !important;
+        border: none !important;
+        color: #fff !important;
+        border-radius: 20px;
+        padding: 8px 24px;
+    }
+    .hero-nav-btn:hover {
+        background-color: #1B283A !important;
+        color: #fff !important;
+    }
+</style>
+
+@if (loading)
+{
+    <div style="min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center;">
+        <div class="spinner-border text-warning" role="status"></div>
+    </div>
+}
+@if (detail is null)
+{
+    <div class="text-center py-5" style="color: #888;">
+        <p>No se encontró el contenido solicitado.</p>
+        <NavLink href="" class="btn btn-outline-warning">Volver al inicio</NavLink>
+    </div>
+}
+else
+{
+    @* Hero section — full width, no border radius *@
+    <div style="position: relative; width: 100vw; margin-left: calc(-50vw + 50%); margin-top: -1rem; min-height: 250px; overflow: hidden; margin-bottom: 32px; background: #0C131E;">
+        @if (!string.IsNullOrEmpty(detail.BackdropPath))
+        {
+            @* Imagen 50% derecho *@
+            <div style="position: absolute; left: 50%; right: 0; top: 0; bottom: 0; overflow: hidden;">
+                <div style="position: absolute; inset: 0;
+                    background-image: url('@(detail.BackdropPath?.StartsWith("http") == true ? detail.BackdropPath : $"https://image.tmdb.org/t/p/w1280{detail.BackdropPath}")');
+                    background-size: 100% 100%;
+                    background-repeat: no-repeat;
+                    background-position: center center;
+                    background-color: #0C131E;">
+                </div>
+                @* Sombra: mismo color que el fondo, opacidad decreciente *@
+                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 180px;
+                    background: linear-gradient(to right,
+                        rgba(12,19,30,1)    0%,
+                        rgba(12,19,30,0.95) 8%,
+                        rgba(12,19,30,0.85) 16%,
+                        rgba(12,19,30,0.7)  26%,
+                        rgba(12,19,30,0.55) 36%,
+                        rgba(12,19,30,0.4)  48%,
+                        rgba(12,19,30,0.25) 60%,
+                        rgba(12,19,30,0.12) 75%,
+                        rgba(12,19,30,0.04) 88%,
+                        rgba(12,19,30,0)    100%
+                    );">
+                </div>
+            </div>
+        }
+
+        @* Contenido superpuesto *@
+        <div style="position: relative; z-index: 2; display: flex; flex-direction: column; min-height: 250px; padding: 48px 0px 32px 64px; margin-left: 121px;">
+
+            @* Sección superior: título + metadatos *@
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 22px;">
+                <h1 style="color: #fff; font-weight: 400; font-size: 2rem; margin: 0;">
+                    <span style="text-transform: uppercase;">@detail.Title</span> <span style="color: #aaa; font-weight: 400; font-size: 1.4rem;">(@detail.ReleaseDateDisplay?.Split('-')[0])</span>
+                </h1>
+
+                @if (!string.IsNullOrEmpty(detail.Tagline))
+                {
+                    <p style="color: #ccc; font-style: italic; font-size: 0.95rem; margin: 0;">@detail.Tagline</p>
+                }
+
+                @* Rating + Age + Duration row *@
+                <div class="d-flex flex-wrap align-items-center gap-3" style="color: #ddd;">
+                    <span style="background: #cea235; color: #1e1c33; font-weight: bold; padding: 2px 10px; border-radius: 4px; font-size: 0.95rem;">
+                        @detail.VoteAverage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                    </span>
+                    @if (!string.IsNullOrEmpty(detail.Certification))
+                    {
+                        <span style="border: 1px solid #888; color: #ccc; padding: 0 6px; border-radius: 3px; font-size: 0.85rem; line-height: 1.6;">+@detail.Certification</span>
+                    }
+                    @if (detail.DisplayRuntime.HasValue)
+                    {
+                        <span>@detail.DisplayRuntime.Value min</span>
+                    }
+                </div>
+            </div>
+
+            @* Inferior: Nav tabs *@
+            <div class="d-flex flex-wrap gap-2" style="margin-top: 14px;">
+                @if (Type == "tv" && tvmazeData?.Seasons is { Count: > 0 })
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("temporadas"))">Episodios</button>
+                }
+                @if (detail.Providers is not null && (detail.Providers.Flatrate?.Count > 0 || detail.Providers.Rent?.Count > 0 || detail.Providers.Buy?.Count > 0))
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("donde-ver"))">¿Dónde ver?</button>
+                }
+                @if (!string.IsNullOrEmpty(detail.Overview))
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("sinopsis"))">Sinopsis</button>
+                }
+                @if (detail.Trailer is not null)
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("trailer"))">Trailer</button>
+                }
+                @if (detail.Credits?.Cast.Count > 0)
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("reparto"))">Reparto</button>
+                }
+                @if (detail.Recommendations.Count > 0)
+                {
+                    <button class="btn btn-sm hero-nav-btn" @onclick="@(() => ScrollTo("recomendados"))">Relacionados</button>
+                }
+
+            </div>
+        </div>
+    </div>
+
+    @* Debajo del hero *@
+    <div class="row g-4">
+        <div class="col-8">
+            @* Temporadas (TVmaze) *@
+            @if (Type == "tv")
+            {
+                <div id="temporadas">
+                    @if (tvmazeLoading)
+                    {
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                        </div>
+                    }
+                    else if (tvmazeData?.Seasons is { Count: > 0 })
+                    {
+                        <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">
+                            @tvmazeData.Seasons.Count @(tvmazeData.Seasons.Count == 1 ? "TEMPORADA" : "TEMPORADAS")
+                        </h5>
+                        <div class="d-flex flex-nowrap overflow-auto gap-2 pb-2" style="overflow-x: auto; scrollbar-width: thin;">
+                            @foreach (var season in tvmazeData.Seasons.OrderBy(s => s.SeasonNumber))
+                            {
+                                var watchedCount = season.Episodes.Count(e => e.Watched);
+                                 <div @onclick="() => SelectSeason(season.SeasonNumber)"
+                                     style="flex: 0 0 auto; cursor: pointer; display: flex; align-items: center;
+                                            width: 165px; height: 72px;
+                                            background: @(selectedSeason == season.SeasonNumber ? "#1B283A" : "#111924");
+                                            border: @(selectedSeason == season.SeasonNumber ? "1px solid #cea235" : "none");
+                                            border-radius: 8px; overflow: hidden;
+                                            transition: background 0.15s, border-color 0.15s;"
+                                     onmouseover="this.style.background='#1B283A'" onmouseout="this.style.background='@(selectedSeason == season.SeasonNumber ? "#1B283A" : "#111924")'">
+                                    @if (!string.IsNullOrEmpty(season.PosterUrl))
+                                    {
+                                        <img src="@season.PosterUrl"
+                                             alt="@season.Name"
+                                             style="width: 48px; height: 72px; object-fit: cover; flex-shrink: 0;" />
+                                    }
+                                    else if (!string.IsNullOrEmpty(detail.PosterPath))
+                                    {
+                                        <img src="https://image.tmdb.org/t/p/w185@(detail.PosterPath)"
+                                             alt="@season.Name"
+                                             style="width: 48px; height: 72px; object-fit: cover; flex-shrink: 0;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 48px; height: 72px; background: #2d2b4a; flex-shrink: 0;
+                                                    display: flex; align-items: center; justify-content: center;">
+                                            <span style="color: #666; font-size: 1.2rem;">?</span>
+                                        </div>
+                                    }
+                                    <div style="padding: 0 10px; overflow: hidden; flex: 1;">
+                                        <div style="margin-bottom: 8px; font-size: 14px; font-weight: 900; color: #78a6b8;">
+                                            Temporada @season.SeasonNumber
+                                        </div>
+                                        <div style="color: #fff; font-size: 14px;">
+                                            @season.EpisodeCount Episodios
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @* Capítulos de la temporada seleccionada *@
+                        @if (selectedSeason.HasValue)
+                        {
+                            var selSeason = tvmazeData.Seasons.FirstOrDefault(s => s.SeasonNumber == selectedSeason.Value);
+                            if (selSeason is not null)
+                            {
+                                <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">
+                                    CAPÍTULOS (@selSeason.Episodes.Count)
+                                </h5>
+                                <div class="d-flex flex-column gap-1">
+                                    @foreach (var ep in selSeason.Episodes.OrderBy(e => e.EpisodeNumber ?? 0))
+                                    {
+                                        <div class="d-flex align-items-center gap-2"
+                                             style="background: #060D17;
+                                                    border-bottom: 1px solid #10161d;
+                                                    padding: 16px 0; color: #78a6b8; font-size: 16px; min-width: 0; overflow: hidden;">
+                                            <span @onclick="@(tvmazeData?.TvmazeId is not null ? EventCallback.Factory.Create(this, () => ToggleEpisodeWatched(ep)) : EventCallback.Factory.Create(this, () => { }))" @onclick:stopPropagation
+                                                  style="cursor: @(tvmazeData?.TvmazeId is not null ? "pointer" : "default"); display: inline-grid; place-items: center; width: 28px; height: 28px; font-size: 28px;">
+                                                <i class="fa-solid fa-circle" style="grid-area: 1/1; color: @(ep.Watched ? "#00cc00" : "#1B2026");"></i>
+                                                <i class="fa-solid fa-check" style="grid-area: 1/1; color: #B9BDCC; font-size: 14px;"></i>
+                                            </span>
+                                            <h4 style="font-size: 16px; flex-grow: 1; margin: 0; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                <span style="font-size: 16px; color: #b9bdcc; font-weight: 500;">T@(selectedSeason) E@(ep.EpisodeNumber?.ToString() ?? "?")</span>
+                                                <span style="color: #78a6b8; font-size: 16px; font-weight: 500;"> - @ep.Name</span>
+                                            </h4>
+                                            @if (!string.IsNullOrEmpty(ep.AirDate))
+                                            {
+                                                <span style="color: #888; font-size: 14px; white-space: nowrap;">@FormatDate(ep.AirDate)</span>
+                                            }
+                                            @if (ep.VoteAverage.HasValue)
+                                            {
+                                                <span style="background: #cea235; color: #1e1c33; font-weight: bold; padding: 0 6px; border-radius: 3px; font-size: 14px; white-space: nowrap;">
+                                                    @ep.VoteAverage.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+            }
+
+            @* ¿Dónde ver? *@
+            @if (detail.Providers is not null && (detail.Providers.Flatrate?.Count > 0 || detail.Providers.Rent?.Count > 0 || detail.Providers.Buy?.Count > 0))
+            {
+                <div id="donde-ver">
+                    <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">¿Dónde ver?</h5>
+                    @if (detail.Providers.Flatrate is { Count: > 0 })
+                    {
+                        <h6 style="color: #aaa; font-size: 0.85rem;">Streaming</h6>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            @foreach (var p in detail.Providers.Flatrate)
+                            {
+                                <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                    @if (!string.IsNullOrEmpty(p.Logo))
+                                    {
+                                        <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
+                                    }
+                                    @p.Name
+                                </a>
+                            }
+                        </div>
+                    }
+                    @if (detail.Providers.Rent is { Count: > 0 })
+                    {
+                        <h6 style="color: #aaa; font-size: 0.85rem;">Alquilar</h6>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            @foreach (var p in detail.Providers.Rent)
+                            {
+                                <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                    @if (!string.IsNullOrEmpty(p.Logo))
+                                    {
+                                        <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
+                                    }
+                                    @p.Name
+                                </a>
+                            }
+                        </div>
+                    }
+                    @if (detail.Providers.Buy is { Count: > 0 })
+                    {
+                        <h6 style="color: #aaa; font-size: 0.85rem;">Comprar</h6>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            @foreach (var p in detail.Providers.Buy)
+                            {
+                                <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                    @if (!string.IsNullOrEmpty(p.Logo))
+                                    {
+                                        <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
+                                    }
+                                    @p.Name
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Sinopsis *@
+            @if (!string.IsNullOrEmpty(detail.Overview))
+            {
+                <div id="sinopsis">
+                    <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">Sinopsis</h5>
+                    <p style="color: #ccc; line-height: 1.7;">@detail.Overview</p>
+                </div>
+            }
+
+            @* Trailer *@
+            @if (detail.Trailer is not null)
+            {
+                <div id="trailer">
+                    <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">Trailer</h5>
+                    <div style="max-width: 560px;">
+                        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px;">
+                            <iframe src="https://www.youtube.com/embed/@detail.Trailer.Key"
+                                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+                                    allowfullscreen>
+                            </iframe>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* Reparto *@
+            @if (detail.Credits?.Cast.Count > 0)
+            {
+                <div id="reparto">
+                    <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">Reparto</h5>
+                    <div class="row g-2">
+                        @foreach (var member in detail.Credits.Cast.Take(10))
+                        {
+                            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                                <div class="text-center p-2" style="background: #1e1c33; border: 1px solid #2d2b4a; border-radius: 8px;">
+                                    @if (!string.IsNullOrEmpty(member.ProfilePath))
+                                    {
+                                        <img src="https://image.tmdb.org/t/p/w185@(member.ProfilePath)"
+                                             alt="@member.Name" class="rounded-circle mb-1"
+                                             style="width: 60px; height: 60px; object-fit: cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded-circle mb-1 d-flex align-items-center justify-content-center mx-auto"
+                                             style="width: 60px; height: 60px; background: #2d2b4a;">
+                                            <span style="color: #666; font-size: 1.5rem;">?</span>
+                                        </div>
+                                    }
+                                    <div style="font-size: 0.8rem; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @member.Name
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @member.Character
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @* Relacionados *@
+            @if (detail.Recommendations.Count > 0)
+            {
+                <div id="recomendados">
+                    <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">Relacionados</h5>
+                    <div class="row g-2">
+                        @foreach (var rec in detail.Recommendations)
+                        {
+                            <div class="col-4 col-sm-3 col-md-2">
+                                <div style="cursor: pointer;" @onclick="() => GoToMedia(rec.MediaType, rec.Id)">
+                                    @if (!string.IsNullOrEmpty(rec.PosterPath))
+                                    {
+                                        <img src="https://image.tmdb.org/t/p/w185@(rec.PosterPath)"
+                                             alt="@rec.Title" class="w-100"
+                                             style="aspect-ratio: 2/3; object-fit: cover; border-radius: 6px;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="aspect-ratio: 2/3; background: #2d2b4a; border-radius: 6px;"
+                                             class="d-flex align-items-center justify-content-center">
+                                            <span style="color: #666;">?</span>
+                                        </div>
+                                    }
+                                    <div style="font-size: 0.75rem; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px;">
+                                        @rec.Title
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        @* Sidebar *@
+        @if (detail is not null)
+        {
+            <div class="col-4">
+                <div style="position: sticky; top: 20px;">
+                    <div class="d-flex" style="gap: 4px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <h5 style="font-family: Anton, Anton-Fallback, Impact; font-size: 22px; font-weight: 400; line-height: 32px; letter-spacing: .02em; color: #fff; text-transform: uppercase; margin: 0 0 12px 0;">INFORMACIÓN DE LA SERIE</h5>
+                            <div style="color: #b9bdcc; font-size: 14px;">
+                                <span style="color: #cea235;">★</span> @detail.VoteAverage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                                <span style="color: #888; font-size: 12px;"> @FormatVoteCount(detail.VoteCount)</span>
+                            </div>
+                            <div style="margin-top: 8px; font-size: 15px; color: #b9bdcc; line-height: 1.7;">
+                                @if (detail.Genres.Count > 0)
+                                {
+                                    <div><span style="color: #888;">Género:</span> @string.Join(", ", detail.Genres.Select(g => g.Name))</div>
+                                }
+                                @if (!string.IsNullOrEmpty(detail.DirectorName))
+                                {
+                                    <div><span style="color: #888;">Director:</span> @detail.DirectorName</div>
+                                }
+                                @if (!string.IsNullOrEmpty(detail.CompanyDisplay))
+                                {
+                                    <div><span style="color: #888;">Productora:</span> @detail.CompanyDisplay</div>
+                                }
+                                @if (!string.IsNullOrEmpty(detail.StatusDisplay))
+                                {
+                                    <div><span style="color: #888;">Estado:</span> @detail.StatusDisplay</div>
+                                }
+                                @if (!string.IsNullOrEmpty(detail.CountryDisplay))
+                                {
+                                    <div><span style="color: #888;">País:</span> @detail.CountryDisplay</div>
+                                }
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(detail.PosterPath))
+                        {
+                            <img src="https://image.tmdb.org/t/p/w185@(detail.PosterPath)"
+                                 alt="@detail.Title"
+                                 style="width: 180px; border-radius: 6px; flex-shrink: 0;" />
+                        }
+                    </div>
+                    <div class="row g-3" style="margin-top: 12px;">
+                        <div class="col-6">
+                            <button class="btn btn-sm w-100 text-center"
+                                    @onclick="ToggleLiked"
+                                    disabled="@(!AuthService.IsLoggedIn || actionLoading)"
+                                    style="background: #222c38; color: @(isLiked ? "#cea235" : "#ddd"); border: 1px solid #222c38; border-radius: 6px; padding: 12px 14px; font-size: 16px; font-weight: 400;">
+                                <i class="fa-solid fa-thumbs-up" style="margin-right: 8px;"></i> Me gusta
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-sm w-100 text-center"
+                                    @onclick="ToggleDisliked"
+                                    disabled="@(!AuthService.IsLoggedIn || actionLoading)"
+                                    style="background: #222c38; color: @(isDisliked ? "#cea235" : "#ddd"); border: 1px solid #222c38; border-radius: 6px; padding: 12px 14px; font-size: 16px; font-weight: 400;">
+                                <i class="fa-solid fa-thumbs-down" style="margin-right: 8px;"></i> No me gusta
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-sm w-100 text-center"
+                                    @onclick="() => showCustomModal = true"
+                                    disabled="@(!AuthService.IsLoggedIn || actionLoading)"
+                                    style="background: #222c38; color: @(isInAnyList ? "#cea235" : "#ddd"); border: 1px solid #222c38; border-radius: 6px; padding: 12px 14px; font-size: 16px; font-weight: 400;">
+                                <i class="fa-solid fa-bookmark" style="margin-right: 8px;"></i> Listas
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button @key="@(Type + "_watched_" + isWatched)"
+                                    class="btn btn-sm w-100 text-center"
+                                    @onclick="ToggleWatchedState"
+                                    disabled="@(!AuthService.IsLoggedIn || actionLoading || (Type == "tv" && (tvmazeData?.Seasons is null || tvmazeData.Seasons.Count == 0 || tvmazeData.TvmazeId is null)))"
+                                    style="background: #222c38; color: @(WatchedButtonActive ? "#cea235" : "#ddd"); border: 1px solid #222c38; border-radius: 6px; padding: 12px 14px; font-size: 16px; font-weight: 400;">
+                                <i class="fa-solid fa-check" style="margin-right: 8px;"></i> @(Type == "movie" ? "Visto" : "Visto todo")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@* Modal de listas personalizadas *@
+@if (showCustomModal)
+{
+    <div @onclick="() => showCustomModal = false"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 999;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 600px; height: 600px; background: #060D17; border: 1px solid #10161d; border-radius: 12px;
+        z-index: 1000; display: flex; flex-direction: column; padding: 8px; box-sizing: border-box;">
+        <div style="text-align: right; padding: 20px 24px;">
+            <button @onclick="() => { if (showNewListForm) showNewListForm = false; else showCustomModal = false; }"
+                    style="background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        @if (showNewListForm)
+        {
+            <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 8px;">
+                    Nueva lista
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 24px;">
+                    <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                        Dale un nombre a tu lista
+                    </div>
+
+                    <input @bind="newListName" @bind:event="oninput"
+                           placeholder="Nombre de la lista"
+                           style="width: 100%; padding: 12px 14px; background: #0d1520; border: 1px solid #cea235; border-radius: 6px; color: #fff; font-size: 16px; font-family: Lato, Lato-fallback, Arial, sans-serif; margin-top: 40px; outline: none;" />
+                </div>
+
+                <div style="padding: 16px 0; display: flex; justify-content: center;">
+                    <button @onclick="CreateNewListAndAdd"
+                            disabled="@(string.IsNullOrWhiteSpace(newListName) || actionLoading)"
+                            style="width: 325px; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(string.IsNullOrWhiteSpace(newListName) || actionLoading ? "0.5" : "1");">
+                        Crear nueva
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 16px;">
+                    Añadir a lista
+                </div>
+
+                <div style="flex: 1; overflow-y: auto; text-align: left; font-size: 18px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                    @if (watchlistListId.HasValue)
+                    {
+                        var watchlist = allLists.FirstOrDefault(l => l.Id == watchlistListId.Value);
+                        if (watchlist is not null)
+                        {
+                            var inWatchlist = listItemIds?.ContainsKey(watchlistListId.Value) == true;
+                         <div @onclick="() => AddToCustomList(watchlistListId!.Value)"
+                              style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                                <i class="fa-solid fa-bookmark" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                                <span style="flex: 1; color: #fff;">@watchlist.Name</span>
+                                @if (inWatchlist)
+                                {
+                                    <div style="width: 26px; height: 26px; background: #cea235; border-radius: 3px; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-check" style="color: #060D17; font-size: 16px;"></i>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <i class="fa-regular fa-square" style="color: #555; font-size: 26px;"></i>
+                                }
+                            </div>
+                        }
+                    }
+
+                    @foreach (var list in allLists.Where(l => l.ListType == "custom").OrderBy(l => l.Name))
+                    {
+                        var inList = listItemIds?.ContainsKey(list.Id) == true;
+                        <div @onclick="() => AddToCustomList(list.Id)"
+                             style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                            <i class="fa-solid fa-user" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                            <span style="flex: 1; color: #fff;">@list.Name</span>
+                            @if (inList)
+                            {
+                                <div style="width: 26px; height: 26px; background: #cea235; border-radius: 3px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fa-solid fa-check" style="color: #060D17; font-size: 16px;"></i>
+                                </div>
+                            }
+                            else
+                            {
+                                <i class="fa-regular fa-square" style="color: #555; font-size: 26px;"></i>
+                            }
+                        </div>
+                    }
+
+                    <div @onclick="() => showNewListForm = true"
+                         style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                        <i class="fa-solid fa-user" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                        <span style="flex: 1; color: #fff;">Crear nueva</span>
+                        <i class="fa-solid fa-plus" style="color: #cea235; font-size: 26px;"></i>
+                    </div>
+                </div>
+
+                <div style="padding: 16px 0; display: flex; justify-content: center;">
+                    <button @onclick="() => showCustomModal = false"
+                            style="width: 325px; padding: 10px 0; border: 1px solid #cea23555; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer;">
+                        Listo
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Type { get; set; } = "";
+
+    [Parameter]
+    public int Id { get; set; }
+
+    private string? prevType;
+    private int prevId;
+    private bool loading = true;
+    private TmdbMediaDetail? detail;
+    private List<ListInfo> allLists = [];
+    private Dictionary<int, int>? listItemIds;
+
+    private int? likedListId;
+    private int? watchedListId;
+    private int? watchlistListId;
+    private bool isLiked;
+    private bool isWatched;
+    private bool isWatchlisted;
+    private bool isDisliked;
+    private bool isInAnyList;
+    private bool allWatched;
+    private bool actionLoading;
+    private bool showCustomModal;
+    private bool showNewListForm;
+    private string newListName = "";
+    private TvmazeShowData? tvmazeData;
+    private bool tvmazeLoading;
+    private int? selectedSeason;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Type != prevType || Id != prevId)
+        {
+            prevType = Type;
+            prevId = Id;
+            await LoadDetail();
+            await SaveRecentItem();
+        }
+    }
+
+    private async Task LoadDetail()
+    {
+        actionLoading = false;
+        loading = true;
+
+        var detailTask = Tmdb.GetMediaDetailAsync(Type, Id);
+        Task<TvmazeShowData?>? tvmazeTask = null;
+        if (Type == "tv")
+        {
+            tvmazeLoading = true;
+            tvmazeTask = Tvmaze.GetTvmazeSeasonsAsync(Id);
+        }
+
+        try
+        {
+            detail = await detailTask;
+        }
+        catch
+        {
+            detail = null;
+        }
+
+        var listsTask = detail is not null && AuthService.IsLoggedIn ? LoadLists() : Task.CompletedTask;
+
+        if (tvmazeTask is not null)
+        {
+            try
+            {
+                tvmazeData = await tvmazeTask;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[TVmaze] Error: {ex.Message}");
+                tvmazeData = null;
+            }
+            tvmazeLoading = false;
+            ComputeAllWatched();
+        }
+
+        await listsTask;
+        loading = false;
+    }
+
+    private async Task SaveRecentItem()
+    {
+        if (detail is null) return;
+        try
+        {
+            var json = await JS.InvokeAsync<string>("localStorage.getItem", "EkaTrack_recent");
+            var items = new List<TmdbMediaItem>();
+            if (!string.IsNullOrEmpty(json))
+            {
+                items = System.Text.Json.JsonSerializer.Deserialize<List<TmdbMediaItem>>(json, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower
+                }) ?? [];
+            }
+
+            items.RemoveAll(i => i.Id == detail.Id && i.MediaType == Type);
+            items.Insert(0, new TmdbMediaItem
+            {
+                Id = detail.Id,
+                MediaType = Type,
+                TitleRaw = detail.TitleRaw,
+                NameRaw = detail.NameRaw,
+                PosterPath = detail.PosterPath,
+                ReleaseDate = detail.ReleaseDate ?? detail.FirstAirDate
+            });
+            if (items.Count > 6) items = items.Take(6).ToList();
+
+            var outJson = System.Text.Json.JsonSerializer.Serialize(items, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower
+            });
+            await JS.InvokeVoidAsync("localStorage.setItem", "EkaTrack_recent", outJson);
+        }
+        catch { }
+    }
+
+    private void GoToMedia(string mediaType, int id) => Nav.NavigateTo($"media/{mediaType}/{id}");
+
+    private static string GetLogoUrl(string? logoPath)
+        => string.IsNullOrEmpty(logoPath) ? "" : $"https://image.tmdb.org/t/p/w92{logoPath}";
+
+    private string GetProviderUrl(string providerName)
+    {
+        return providerName.ToLowerInvariant() switch
+        {
+            var n when n.Contains("netflix") => "https://www.netflix.com",
+            var n when n.Contains("amazon") || n.Contains("prime") => "https://www.primevideo.com",
+            var n when n.Contains("disney") => "https://www.disneyplus.com",
+            var n when n.Contains("max") || n.Contains("hbo") => "https://www.max.com",
+            var n when n.Contains("apple") => "https://tv.apple.com",
+            var n when n.Contains("rakuten") => "https://rakuten.tv",
+            var n when n.Contains("filmin") => "https://www.filmin.es",
+            var n when n.Contains("movistar") => "https://ver.movistarplus.es",
+            var n when n.Contains("crunchyroll") => "https://www.crunchyroll.com",
+            var n when n.Contains("atresplayer") => "https://www.atresplayer.com",
+            var n when n.Contains("mitele") => "https://www.mitele.es",
+            _ => $"https://www.themoviedb.org/{Type}/{Id}/watch?locale=ES"
+        };
+    }
+
+    private static string FormatDate(string dateStr)
+    {
+        if (dateStr.Length >= 10 && DateTime.TryParse(dateStr[..10], out var dt))
+            return dt.ToString("dd-MM-yyyy");
+        return dateStr;
+    }
+
+    private static string FormatVoteCount(int count)
+    {
+        return count switch
+        {
+            >= 1000000 => $"{(count / 1000000.0):0.#}M",
+            >= 1000 => $"{(count / 1000.0):0.#}K",
+            _ => count.ToString()
+        };
+    }
+
+    private async Task LoadLists()
+    {
+        try
+        {
+            allLists = await ListsService.GetListsAsync();
+
+            likedListId = allLists.FirstOrDefault(l => l.ListType == "liked")?.Id;
+            watchedListId = allLists.FirstOrDefault(l => l.ListType == "watched")?.Id;
+            watchlistListId = allLists.FirstOrDefault(l => l.ListType == "watchlist")?.Id;
+
+            await CheckIfInLists();
+        }
+        catch
+        {
+            // 401 redirect handled elsewhere
+        }
+    }
+
+    private async Task CheckIfInLists()
+    {
+        if (detail is null) return;
+
+        var itemIds = new Dictionary<int, int>();
+
+        if (likedListId.HasValue)
+        {
+            var likedItems = await ListsService.GetListItemsAsync(likedListId.Value);
+            isLiked = likedItems.Any(i => i.TmdbId == detail.Id);
+        }
+
+        if (watchedListId.HasValue)
+        {
+            var watchedItems = await ListsService.GetListItemsAsync(watchedListId.Value);
+            isWatched = watchedItems.Any(i => i.TmdbId == detail.Id);
+        }
+
+        if (watchlistListId.HasValue)
+        {
+            var watchlistItems = await ListsService.GetListItemsAsync(watchlistListId.Value);
+            var match = watchlistItems.FirstOrDefault(i => i.TmdbId == detail.Id);
+            isWatchlisted = match is not null;
+            if (match is not null) itemIds[watchlistListId.Value] = match.Id;
+        }
+
+        isInAnyList = isWatchlisted;
+        foreach (var list in allLists.Where(l => l.ListType == "custom"))
+        {
+            var items = await ListsService.GetListItemsAsync(list.Id);
+            var match = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+            if (match is not null)
+            {
+                itemIds[list.Id] = match.Id;
+                isInAnyList = true;
+            }
+        }
+
+        listItemIds = itemIds;
+    }
+
+    private void ComputeAllWatched()
+    {
+        if (tvmazeData?.Seasons is null || tvmazeData.Seasons.Count == 0)
+        {
+            allWatched = false;
+            return;
+        }
+
+        var seasons = selectedSeason.HasValue
+            ? tvmazeData.Seasons.Where(s => s.SeasonNumber == selectedSeason.Value)
+            : tvmazeData.Seasons;
+
+        allWatched = seasons.All(s =>
+            s.Episodes is not null && s.Episodes.Count > 0 && s.Episodes.All(e => e.Watched));
+    }
+
+    private async Task RefreshDetailRating()
+    {
+        if (detail is null) return;
+        try
+        {
+            var refreshed = await Tmdb.GetMediaDetailAsync(Type, Id);
+            if (refreshed is not null)
+            {
+                detail.VoteAverage = refreshed.VoteAverage;
+                detail.VoteCount = refreshed.VoteCount;
+            }
+        }
+        catch { }
+    }
+
+    private bool WatchedButtonActive => Type == "movie" ? isWatched : allWatched;
+
+    private async Task ToggleWatchedState()
+    {
+        if (Type == "movie")
+            await ToggleWatched();
+        else
+            await ToggleAllWatched();
+    }
+
+    private async Task ToggleLiked()
+    {
+        if (!likedListId.HasValue || detail is null) return;
+        actionLoading = true;
+        try
+        {
+            if (isLiked)
+            {
+                isLiked = false;
+                await Task.WhenAll(
+                    ToggleList(likedListId.Value, () => { }, true),
+                    Tmdb.VoteAsync(Type, detail.Id, null)
+                );
+            }
+            else
+            {
+                isLiked = true;
+                if (isDisliked) isDisliked = false;
+                await Task.WhenAll(
+                    Tmdb.VoteAsync(Type, detail.Id, 10),
+                    ToggleList(likedListId.Value, () => { }, false)
+                );
+            }
+        }
+        catch { }
+        finally { actionLoading = false; }
+        StateHasChanged();
+        _ = RefreshDetailRating();
+    }
+
+    private async Task ToggleDisliked()
+    {
+        if (detail is null) return;
+        actionLoading = true;
+        try
+        {
+            if (isDisliked)
+            {
+                isDisliked = false;
+                await Tmdb.VoteAsync(Type, detail.Id, null);
+            }
+            else
+            {
+                isDisliked = true;
+                var tasks = new List<Task> { Tmdb.VoteAsync(Type, detail.Id, 0) };
+                if (isLiked)
+                {
+                    isLiked = false;
+                    tasks.Add(ToggleList(likedListId!.Value, () => { }, true));
+                }
+                await Task.WhenAll(tasks);
+            }
+        }
+        catch { }
+        finally { actionLoading = false; }
+        StateHasChanged();
+        _ = RefreshDetailRating();
+    }
+
+    private async Task ToggleWatched()
+    {
+        if (!watchedListId.HasValue || detail is null) return;
+        actionLoading = true;
+        try
+        {
+            if (isWatched)
+            {
+                var items = await ListsService.GetListItemsAsync(watchedListId.Value);
+                var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+                if (item is not null)
+                    await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
+                isWatched = false;
+            }
+            else
+            {
+                await ListsService.AddItemToListAsync(
+                    watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+                isWatched = true;
+            }
+        }
+        catch { }
+        finally { actionLoading = false; }
+        StateHasChanged();
+    }
+
+    private async Task ToggleWatchlist()
+    {
+        if (!watchlistListId.HasValue || detail is null) return;
+        actionLoading = true;
+        try
+        {
+            if (isWatchlisted)
+            {
+                var items = await ListsService.GetListItemsAsync(watchlistListId.Value);
+                var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+                if (item is not null)
+                    await ListsService.RemoveItemFromListAsync(watchlistListId.Value, item.Id);
+                isWatchlisted = false;
+            }
+            else
+            {
+                await ListsService.AddItemToListAsync(
+                    watchlistListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+                isWatchlisted = true;
+            }
+        }
+        catch { }
+        finally { actionLoading = false; }
+        StateHasChanged();
+    }
+
+    private async Task ToggleList(int listId, Action toggle, bool currentlyInList)
+    {
+        if (detail is null) return;
+        try
+        {
+            if (currentlyInList)
+            {
+                var items = await ListsService.GetListItemsAsync(listId);
+                var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+                if (item is not null)
+                {
+                    await ListsService.RemoveItemFromListAsync(listId, item.Id);
+                }
+            }
+            else
+            {
+                await ListsService.AddItemToListAsync(
+                    listId, detail.Id, Type, detail.Title, detail.PosterPath);
+            }
+            toggle();
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private async Task AddToCustomList(int listId)
+    {
+        if (detail is null) return;
+        actionLoading = true;
+        try
+        {
+            if (listItemIds?.ContainsKey(listId) == true)
+            {
+                await ListsService.RemoveItemFromListAsync(listId, listItemIds[listId]);
+                listItemIds.Remove(listId);
+            }
+            else
+            {
+                var item = await ListsService.AddItemToListAsync(
+                    listId, detail.Id, Type, detail.Title, detail.PosterPath);
+                (listItemIds ??= [])[listId] = item.Id;
+            }
+
+            isInAnyList = listItemIds?.Count > 0;
+            isWatchlisted = watchlistListId.HasValue && listItemIds?.ContainsKey(watchlistListId.Value) == true;
+        }
+        catch
+        {
+            // ignore
+        }
+        finally { actionLoading = false; }
+    }
+
+    private async Task CreateNewListAndAdd()
+    {
+        if (string.IsNullOrWhiteSpace(newListName) || detail is null) return;
+        actionLoading = true;
+        try
+        {
+            var newList = await ListsService.CreateListAsync(newListName, null);
+            var item = await ListsService.AddItemToListAsync(
+                newList.Id, detail.Id, Type, detail.Title, detail.PosterPath);
+            allLists.Add(new ListInfo
+            {
+                Id = newList.Id,
+                Name = newList.Name,
+                Description = newList.Description,
+                ListType = newList.ListType
+            });
+            (listItemIds ??= [])[newList.Id] = item.Id;
+            isInAnyList = true;
+            newListName = "";
+            showNewListForm = false;
+        }
+        catch
+        {
+            // ignore
+        }
+        finally { actionLoading = false; }
+    }
+
+    private async Task ScrollTo(string elementId)
+    {
+        await JS.InvokeVoidAsync("eval", $"document.getElementById('{elementId}')?.scrollIntoView({{ behavior: 'smooth', block: 'start' }})");
+    }
+
+    private void SelectSeason(int seasonNumber)
+    {
+        selectedSeason = selectedSeason == seasonNumber ? null : seasonNumber;
+        ComputeAllWatched();
+    }
+
+    private async Task ToggleAllWatched()
+    {
+        if (!AuthService.IsLoggedIn || tvmazeData is null || tvmazeData.TvmazeId is null) return;
+        actionLoading = true;
+        try
+        {
+            var episodes = selectedSeason.HasValue
+                ? tvmazeData.Seasons.Where(s => s.SeasonNumber == selectedSeason.Value).SelectMany(s => s.Episodes)
+                : tvmazeData.Seasons.SelectMany(s => s.Episodes);
+            var newWatched = !allWatched;
+            var showTitle = detail?.Title ?? "";
+            var batchEpisodes = episodes.Select(ep => (
+                ep.TvmazeEpisodeId,
+                ep.SeasonNumber,
+                ep.EpisodeNumber ?? 0,
+                (string)showTitle
+            )).ToList();
+            if (batchEpisodes.Count == 0) return;
+            await Tvmaze.ToggleEpisodeBatchAsync(batchEpisodes, newWatched);
+            foreach (var ep in episodes) ep.Watched = newWatched;
+            if (!selectedSeason.HasValue && watchedListId.HasValue && detail is not null)
+            {
+                if (newWatched)
+                {
+                    await ListsService.AddItemToListAsync(
+                        watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+                    isWatched = true;
+                }
+                else
+                {
+                    var items = await ListsService.GetListItemsAsync(watchedListId.Value);
+                    var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+                    if (item is not null)
+                    {
+                        await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
+                        isWatched = false;
+                    }
+                }
+            }
+            ComputeAllWatched();
+            StateHasChanged();
+        }
+        catch { }
+        finally { actionLoading = false; }
+    }
+
+    private async Task ToggleEpisodeWatched(TvmazeEpisodeData ep)
+    {
+        if (!AuthService.IsLoggedIn || detail is null || tvmazeData?.TvmazeId is null) return;
+        try
+        {
+            var success = await Tvmaze.ToggleEpisodeWatchedAsync(
+                ep.TvmazeEpisodeId, ep.SeasonNumber, ep.EpisodeNumber ?? 0, detail.Title);
+            if (success)
+            {
+                ep.Watched = !ep.Watched;
+                ComputeAllWatched();
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+}

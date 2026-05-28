@@ -1,0 +1,1211 @@
+@page "/listas"
+@using EkaTrack.Client.Models
+@using System.Linq
+@inject ListsService ListsService
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject TmdbService Tmdb
+@inject TvmazeService Tvmaze
+
+<style>
+    body {
+        overflow-x: hidden;
+    }
+</style>
+
+<div class="mb-4">
+    <h2 style="color: #fff;">Listas</h2>
+</div>
+
+@if (!AuthService.IsLoggedIn)
+{
+    <div class="text-center py-5">
+        <p>Inicia sesión para ver tus listas</p>
+        <RadzenButton Text="Iniciar sesión" Click="@(() => Nav.NavigateTo("login"))" />
+    </div>
+    return;
+}
+
+@if (loading)
+{
+    <div style="min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center;">
+        <div class="spinner-border text-warning" role="status"></div>
+    </div>
+    return;
+}
+
+@* ─── Tab navigation ───────────────────────────────────────────── *@
+
+<div class="d-flex gap-2 mb-4 flex-wrap">
+    <button class="btn btn-sm"
+            style="background-color: #2B333D; color: @(isMyListsTab || isCustomListView ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 16px; font-weight: @(isMyListsTab || isCustomListView ? "700" : "400");"
+            @onclick="GoToMyLists">
+        Mis listas
+    </button>
+    <button class="btn btn-sm"
+            style="background-color: #2B333D; color: @(activeTab == "watchlist" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 16px; font-weight: @(activeTab == "watchlist" ? "700" : "400");"
+            @onclick="GoToWatchlist">
+        Watchlist
+    </button>
+    <button class="btn btn-sm"
+            style="background-color: #2B333D; color: @(activeTab == "watched" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 16px; font-weight: @(activeTab == "watched" ? "700" : "400");"
+            @onclick="GoToWatched">
+        Visto
+    </button>
+    <button class="btn btn-sm"
+            style="background-color: #2B333D; color: @(activeTab == "liked" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 16px; font-weight: @(activeTab == "liked" ? "700" : "400");"
+            @onclick="GoToLiked">
+        Me gusta
+    </button>
+</div>
+
+@* ─── Tab: Mis listas (grid de listas personalizadas) ─────────── *@
+
+@if (isMyListsTab && !isCustomListView)
+{
+    <div style="box-sizing: border-box; overflow: hidden; height: 60px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 16px;">
+        <span style="color: #d5d5d5; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
+              @onclick="() => showCreateDialog = true"
+              onmouseover="this.style.color='#eee'" onmouseout="this.style.color='#d5d5d5'">
+            <i class="fa-solid fa-folder-plus"></i>
+            Crear nueva
+        </span>
+    </div>
+
+    @if (customLists.Count == 0)
+    {
+        <div class="text-center py-5" style="color: #888;">
+            <p>Aún no tienes listas personalizadas.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var lst in customLists)
+            {
+                <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                    <div style="position: relative; background: @(string.IsNullOrEmpty(lst.FirstItemPoster) ? "#0A121B" : "#1e1c33"); cursor: pointer; border-radius: 12px; overflow: hidden; height: 120px; display: flex; flex-direction: column; justify-content: center; padding: 12px 16px;"
+                         @onclick="() => GoToCustomList(lst.Id)">
+                        @if (!string.IsNullOrEmpty(lst.FirstItemPoster))
+                        {
+                            <div style="position: absolute; inset: 0; background-image: url('https://image.tmdb.org/t/p/w342@(lst.FirstItemPoster)'); background-size: cover; background-position: center; opacity: 0.25;"></div>
+                            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(30,28,51,1) 0%, rgba(30,28,51,0.3) 50%, rgba(30,28,51,0.1) 100%);"></div>
+                        }
+                        <div style="position: relative; z-index: 1;">
+                            <div style="color: #fff; font-size: 14px; font-weight: 600;">@lst.Name</div>
+                            <small style="color: #ccc;">@lst.ItemCount TÍTULOS</small>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@* ─── Tab: Items de una lista ─────────────────── *@
+
+@if (!isMyListsTab || isCustomListView)
+{
+    <div style="margin-bottom: 16px;">
+        <div style="box-sizing: border-box; overflow: hidden; height: 60px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 0;">
+            <div style="display: flex; gap: 4px; border-radius: 100px; background: #222C38; padding: 0; height: 36px; width: 280px; align-items: center;">
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "" ? "#2B333D" : "transparent"); color: @(mediaFilter == "" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterAll">
+                    Ver Todo
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "movie" ? "#2B333D" : "transparent"); color: @(mediaFilter == "movie" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterMovies">
+                    Películas
+                </button>
+                <button class="btn btn-sm"
+                        style="background-color: @(mediaFilter == "tv" ? "#2B333D" : "transparent"); color: @(mediaFilter == "tv" ? "#cea235" : "#ddd"); border: none; border-radius: 100px !important; height: 36px; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; flex: 1;"
+                        @onclick="FilterSeries">
+                    Series
+                </button>
+            </div>
+            <span style="margin-left: 10px; color: #aaa; font-size: 14px;">
+                @GetFilteredCount() títulos
+            </span>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <SortButton OnSortChanged="HandleSortChanged" />
+                <button class="btn btn-sm"
+                        style="background: #222C38; color: #ddd; border: none; border-radius: 100px; height: 36px; font-size: 14px; padding: 8px 16px; display: flex; align-items: center; gap: 6px;"
+                        @onclick="ToggleFilters">
+                    <i class="fa-solid fa-filter"></i> Filtros
+                </button>
+            </div>
+        </div>
+
+        @if (showFilters)
+        {
+            <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
+                @foreach (var opt in filterOptions)
+                {
+                    <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                          onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                        @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                    </span>
+                }
+                <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
+                    <i class="fa-solid fa-xmark"></i> Reinicializar
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (isCustomListView)
+    {
+        <div style="box-sizing: border-box; overflow: hidden; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); margin-bottom: 12px; display: flex; align-items: center;">
+            <div style="font-size: 18px;">
+                <a @onclick="GoToMyLists" style="color: #fff; cursor: pointer; text-decoration: none; transition: opacity 0.15s;"
+                   onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">Mis Listas</a>
+                <i class="fa-solid fa-angle-right" style="color: #cea235; margin: 0 8px;"></i>
+                <span style="color: #fff;">@currentListName</span>
+            </div>
+            <div style="margin-left: auto; display: flex; gap: 30px; align-items: center;">
+                <a @onclick="ShareList" style="color: #fff; cursor: pointer; font-size: 15px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-share-nodes"></i> Compartir
+                </a>
+                <a @onclick="OpenAddTitlesModal" style="color: #fff; cursor: pointer; font-size: 15px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-plus"></i> Añadir títulos
+                </a>
+                <a @onclick="() => { var list = allLists.FirstOrDefault(x => x.Id == selectedListId); if (list is not null) StartEditList(list); }"
+                   style="color: #fff; cursor: pointer; font-size: 15px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-pen"></i> Cambiar de nombre
+                </a>
+                <a @onclick="() => { var list = allLists.FirstOrDefault(x => x.Id == selectedListId); if (list is not null) DeleteList(list); }"
+                   style="color: #fff; cursor: pointer; font-size: 15px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-trash"></i> Eliminar
+                </a>
+            </div>
+        </div>
+    }
+
+    @if (currentItems.Count == 0)
+    {
+        <div class="text-center py-5" style="color: #888;">
+            <p>No hay títulos en esta lista.</p>
+        </div>
+    }
+    else if (isCustomListView)
+    {
+        <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 16px; padding: 0 4px;">
+            @foreach (var item in sortedCurrentItems)
+            {
+                var key = $"{item.TmdbId}:{item.MediaType}";
+                <MediaCard Id="@item.TmdbId" MediaType="@item.MediaType" Title="@item.Title" PosterPath="@item.PosterPath"
+                           IsLiked="_likedKeys.Contains(key)" IsDisliked="_dislikedKeys.Contains(key)"
+                           IsInAnyList="_inAnyListKeys.Contains(key)"
+                           IsWatched="_watchedKeys.Contains(key)"
+                           OnToggleLiked="() => ToggleLikedItem(item)"
+                           OnToggleDisliked="() => ToggleDislikedItem(item)"
+                           OnOpenLists="() => OpenListSelector(item)"
+                           OnToggleWatched="() => ToggleWatchedItem(item)" />
+            }
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var item in sortedCurrentItems)
+            {
+                var key = $"{item.TmdbId}:{item.MediaType}";
+                <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                    <MediaCard Id="@item.TmdbId" MediaType="@item.MediaType" Title="@item.Title" PosterPath="@item.PosterPath"
+                               IsLiked="_likedKeys.Contains(key)" IsDisliked="_dislikedKeys.Contains(key)"
+                               IsInAnyList="_inAnyListKeys.Contains(key)"
+                               IsWatched="_watchedKeys.Contains(key)"
+                               OnToggleLiked="() => ToggleLikedItem(item)"
+                               OnToggleDisliked="() => ToggleDislikedItem(item)"
+                               OnOpenLists="() => OpenListSelector(item)"
+                               OnToggleWatched="() => ToggleWatchedItem(item)" />
+                </div>
+            }
+        </div>
+    }
+}
+
+@* ─── Overlay: Crear lista ─── *@
+
+@if (showCreateDialog)
+{
+    <div @onclick="CancelCreate"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 1050;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 600px; height: 600px; background: #060D17;         border: 1px solid #10161d; border-radius: 8px;
+        z-index: 1060; display: flex; flex-direction: column; padding: 8px; box-sizing: border-box;">
+        <div style="text-align: right; padding: 20px 24px;">
+            <button @onclick="CancelCreate"
+                    style="background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+            <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 8px;">
+                Nueva lista
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 24px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                    Dale un nombre a tu lista
+                </div>
+
+                <input @bind="newListName" @bind:event="oninput"
+                       placeholder="Nombre de la lista"
+                       style="width: 100%; padding: 12px 14px; background: #0d1520; border: 1px solid #cea235; border-radius: 6px; color: #fff; font-size: 16px; font-family: Lato, Lato-fallback, Arial, sans-serif; margin-top: 40px; outline: none;" />
+            </div>
+
+            <div style="padding: 16px 0; display: flex; justify-content: center;">
+                <button @onclick="HandleCreateList"
+                        disabled="@(string.IsNullOrWhiteSpace(newListName) || creating)"
+                        style="width: 325px; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(string.IsNullOrWhiteSpace(newListName) || creating ? "0.5" : "1");">
+                    @(creating ? "Creando..." : "Crear nueva")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ─── Overlay: Editar lista ─── *@
+
+@if (showEditDialog)
+{
+    <div @onclick="CancelEdit"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 1050;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 600px; height: 600px; background: #060D17;         border: 1px solid #10161d; border-radius: 8px;
+        z-index: 1060; display: flex; flex-direction: column; padding: 8px; box-sizing: border-box;">
+        <div style="text-align: right; padding: 20px 24px;">
+            <button @onclick="CancelEdit"
+                    style="background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+            <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 8px;">
+                Cambiar nombre
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 24px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                    Dale un nombre a tu lista
+                </div>
+
+                <input @bind="editListName" @bind:event="oninput"
+                       placeholder="@(editingList?.Name ?? "")"
+                       style="width: 100%; padding: 12px 14px; background: #0d1520; border: 1px solid #cea235; border-radius: 6px; color: #fff; font-size: 16px; font-family: Lato, Lato-fallback, Arial, sans-serif; margin-top: 40px; outline: none;" />
+            </div>
+
+            <div style="padding: 16px 0; display: flex; justify-content: center;">
+                <button @onclick="HandleEditList"
+                        disabled="@(string.IsNullOrWhiteSpace(editListName) || editing)"
+                        style="width: 325px; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(string.IsNullOrWhiteSpace(editListName) || editing ? "0.5" : "1");">
+                    @(editing ? "Guardando..." : "Listo")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ─── Overlay: Confirmar eliminar ─── *@
+
+@if (showDeleteConfirm)
+{
+    <div @onclick="CancelDelete"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 1050;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 280px; height: 200px; background: #060D17;         border: 1px solid #10161d; border-radius: 8px;
+        z-index: 1060; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box;">
+        <div style="font-size: 20px; font-weight: 500; color: #fff; margin-bottom: 12px;">
+            Eliminar lista
+        </div>
+        <div style="font-size: 16px; color: #737373; flex: 1;">
+            No se podrá deshacer esta acción. ¿Seguro que quieres eliminar tu lista?
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <button @onclick="CancelDelete"
+                    style="background: none; border: none; color: #737373; font-size: 14px; cursor: pointer; padding: 6px 12px;">
+                Cancelar
+            </button>
+            <button @onclick="HandleDeleteList" disabled="@deleting"
+                    style="background: none; border: none; color: #78a6b8; font-size: 14px; cursor: pointer; padding: 6px 12px; opacity: @(deleting ? "0.5" : "1");">
+                @(deleting ? "Eliminando..." : "Eliminar")
+            </button>
+        </div>
+    </div>
+}
+
+@* ─── Overlay: Añadir títulos ─── *@
+
+@if (showAddTitlesModal)
+{
+    <div @onclick="CancelAddTitles"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 1050;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 600px; height: 600px; background: #060D17; border: 1px solid #10161d; border-radius: 8px;
+        z-index: 1060; display: flex; flex-direction: column; padding: 8px; box-sizing: border-box;">
+        <div style="text-align: right; padding: 12px 24px 0;">
+            <button @onclick="CancelAddTitles"
+                    style="background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div style="flex: 1; text-align: center; margin: 0 36px 28px; display: flex; flex-direction: column; min-height: 0;">
+            <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 16px; flex-shrink: 0;">
+                Agregar a
+            </div>
+
+            <div style="font-size: 14px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #d5d5d5; margin-bottom: 12px; text-align: center; flex-shrink: 0;">
+                Búsqueda de Películas o Series de TV
+            </div>
+
+            <div style="position: relative; margin-bottom: 16px; flex-shrink: 0;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #999c9f; z-index: 1;"></i>
+                <input @ref="addTitlesSearchRef"
+                       @bind="addTitlesSearch"
+                       @bind:event="oninput"
+                       @bind:after="OnAddTitlesSearchChanged"
+                       placeholder="Buscar..."
+                       style="width: 100%; padding: 10px 10px 10px 36px; background: #0d1520; border: 1px solid #10161d; border-radius: 6px; color: #fff; font-size: 14px; outline: none;" />
+                @if (addTitlesLoading)
+                {
+                    <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%);">
+                        <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                    </div>
+                }
+            </div>
+
+            <div style="flex: 1; overflow-y: auto; text-align: left; min-height: 0;">
+                @if (addTitlesResults.Count == 0 && addTitlesSearch.Length >= 3)
+                {
+                    <div style="color: #888; text-align: center; padding-top: 40px;">
+                        No se encontraron resultados.
+                    </div>
+                }
+                else
+                {
+                    @foreach (var item in addTitlesResults)
+                    {
+                        var key = $"{item.Id}:{item.MediaType}";
+                        var isSelected = addTitlesInList.Contains(key);
+                        <div @onclick="() => ToggleAddTitle(item)"
+                             style="display: flex; align-items: center; padding: 4px 0; border-bottom: 1px solid #10161d; cursor: pointer;">
+                            <img src="@GetPosterUrl(item.PosterPath, "w92")"
+                                 alt="@item.Title"
+                                 style="width: 32px; height: 48px; object-fit: cover; border-radius: 3px; margin-right: 10px; flex-shrink: 0;" />
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="color: #fff; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    @item.Title
+                                </div>
+                                <div style="color: #888; font-size: 11px;">
+                                    @(item.MediaType == "movie" ? "Película" : "Serie") @if (!string.IsNullOrEmpty(item.Year)) {
+                                    <span>· @item.Year</span>
+                                }
+                            </div>
+                        </div>
+                        <div style="width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                            @if (isSelected)
+                            {
+                                <div style="width: 18px; height: 18px; background: #cea235; border-radius: 2px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fa-solid fa-check" style="color: #060D17; font-size: 12px;"></i>
+                                </div>
+                            }
+                            else
+                            {
+                                <i class="fa-regular fa-square" style="color: #555; font-size: 18px;"></i>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div style="padding: 16px 0 0; display: flex; justify-content: center; flex-shrink: 0;">
+            <button @onclick="HandleAddTitles"
+                    disabled="@(addTitlesLoading)"
+                    style="width: 100%; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(addTitlesLoading ? "0.5" : "1");">
+                Listo
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@if (showCustomModal && _listSelectorItem is not null)
+{
+    <div @onclick="CloseListSelector"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 999;">
+    </div>
+
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: #060D17; border: 1px solid #10161d; border-radius: 12px; z-index: 1000; display: flex; flex-direction: column; padding: 8px; box-sizing: border-box;">
+        <div style="text-align: right; padding: 20px 24px;">
+            <button @onclick="async () => { if (showNewListForm) showNewListForm = false; else await CloseListSelector(); }"
+                    style="background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        @if (showNewListForm)
+        {
+            <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 8px;">
+                    Nueva lista
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 24px;">
+                    <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                        Dale un nombre a tu lista
+                    </div>
+                    <input @bind="newListName" @bind:event="oninput"
+                           placeholder="Nombre de la lista"
+                           style="width: 100%; padding: 12px 14px; background: #0d1520; border: 1px solid #cea235; border-radius: 6px; color: #fff; font-size: 16px; font-family: Lato, Lato-fallback, Arial, sans-serif; margin-top: 40px; outline: none;" />
+                </div>
+                <div style="padding: 16px 0; display: flex; justify-content: center;">
+                    <button @onclick="CreateNewListAndAdd"
+                            disabled="@(string.IsNullOrWhiteSpace(newListName) || actionLoading)"
+                            style="width: 325px; padding: 10px 0; border: none; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer; opacity: @(string.IsNullOrWhiteSpace(newListName) || actionLoading ? "0.5" : "1");">
+                        Crear nueva
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="height: 100%; text-align: center; margin: 0 36px; margin-inline-start: 36px; display: flex; flex-direction: column; padding: 16px 32px 48px;">
+                <div style="font-size: 22px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff; padding-bottom: 14px; border-bottom: 1px solid #10161d; margin-bottom: 16px;">
+                    Añadir a lista
+                </div>
+                <div style="flex: 1; overflow-y: auto; text-align: left; font-size: 18px; font-family: Lato, Lato-fallback, Arial, sans-serif; color: #fff;">
+                    @if (watchlistListId.HasValue)
+                    {
+                        var watchlist = allLists.FirstOrDefault(l => l.Id == watchlistListId.Value);
+                        if (watchlist is not null)
+                        {
+                            var inWatchlist = listItemIds?.ContainsKey(watchlistListId.Value) == true;
+                            <div @onclick="() => AddToCustomList(watchlistListId!.Value)"
+                                 style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                                <i class="fa-solid fa-bookmark" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                                <span style="flex: 1; color: #fff;">@watchlist.Name</span>
+                                @if (inWatchlist)
+                                {
+                                    <div style="width: 26px; height: 26px; background: #cea235; border-radius: 3px; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-check" style="color: #060D17; font-size: 16px;"></i>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <i class="fa-regular fa-square" style="color: #555; font-size: 26px;"></i>
+                                }
+                            </div>
+                        }
+                    }
+
+                    @foreach (var list in allLists.Where(l => l.ListType == "custom").OrderBy(l => l.Name))
+                    {
+                        var inList = listItemIds?.ContainsKey(list.Id) == true;
+                        <div @onclick="() => AddToCustomList(list.Id)"
+                             style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                            <i class="fa-solid fa-user" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                            <span style="flex: 1; color: #fff;">@list.Name</span>
+                            @if (inList)
+                            {
+                                <div style="width: 26px; height: 26px; background: #cea235; border-radius: 3px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fa-solid fa-check" style="color: #060D17; font-size: 16px;"></i>
+                                </div>
+                            }
+                            else
+                            {
+                                <i class="fa-regular fa-square" style="color: #555; font-size: 26px;"></i>
+                            }
+                        </div>
+                    }
+
+                    <div @onclick="() => showNewListForm = true"
+                         style="display: flex; align-items: center; padding: 18px 14px; border-bottom: 1px solid #10161d; cursor: pointer;">
+                        <i class="fa-solid fa-user" style="color: #cea235; margin-right: 16px; width: 24px; font-size: 20px;"></i>
+                        <span style="flex: 1; color: #fff;">Crear nueva</span>
+                        <i class="fa-solid fa-plus" style="color: #cea235; font-size: 26px;"></i>
+                    </div>
+                </div>
+                <div style="padding: 16px 0; display: flex; justify-content: center;">
+                    <button @onclick="CloseListSelector"
+                            style="width: 325px; padding: 10px 0; border: 1px solid #cea23555; border-radius: 4px; background: #cea235; color: #000; font-size: 16px; font-weight: 500; cursor: pointer;">
+                        Listo
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private string activeTab = "";
+    private bool isMyListsTab => string.IsNullOrEmpty(activeTab);
+    private bool isCustomListView => activeTab == "custom_lists" && selectedListId.HasValue;
+    private string mediaFilter = "";
+    private bool showFilters;
+    private string _sortOrder = "none";
+    private readonly List<string> filterOptions =
+    [
+        "Año de estreno",
+        "Géneros",
+        "Precio",
+        "Calificación",
+        "País de producción",
+        "Duración",
+        "Clasificación por edades"
+    ];
+
+    private List<ListInfo> allLists = [];
+    private List<ListInfo> customLists => allLists.Where(l => l.ListType == "custom").ToList();
+    private List<ListItemModel> currentItems = [];
+    private HashSet<string> _likedKeys = [];
+    private HashSet<string> _dislikedKeys = [];
+    private HashSet<string> _watchedKeys = [];
+    private HashSet<string> _inAnyListKeys = [];
+    private List<ListItemModel> sortedCurrentItems
+    {
+        get
+        {
+            if (_sortOrder == "none") return currentItems;
+            return _sortOrder == "asc"
+                ? currentItems.OrderBy(i => i.Title).ToList()
+                : currentItems.OrderByDescending(i => i.Title).ToList();
+        }
+    }
+
+    private int? selectedListId;
+    private string currentListName = "";
+
+    // Create
+    private bool showCreateDialog;
+    private bool creating;
+    private string newListName = "";
+    private string newListDescription = ""; // kept for compatibility
+
+    // Edit
+    private bool showEditDialog;
+    private bool editing;
+    private ListInfo? editingList;
+    private string editListName = "";
+    private string editListDescription = ""; // kept for compatibility
+
+    // Delete
+    private bool showDeleteConfirm;
+    private bool deleting;
+    private ListInfo? deleteTarget;
+
+    // Add titles
+    private bool showAddTitlesModal;
+    private string addTitlesSearch = "";
+    private List<TmdbMediaItem> addTitlesResults = [];
+    private List<TmdbMediaItem> _addTitlesTrendingCache = [];
+    private readonly HashSet<string> addTitlesInList = [];
+    private readonly Dictionary<string, int> addTitlesItemIds = [];
+    private CancellationTokenSource? _addTitlesCts;
+    private bool addTitlesLoading;
+    private ElementReference addTitlesSearchRef;
+    private bool _focusAddTitlesSearch;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitAsync();
+        if (!AuthService.IsLoggedIn)
+        {
+            loading = false;
+            return;
+        }
+
+        ParseQueryParams();
+        await LoadData();
+        await LoadInAnyListKeysAsync();
+        loading = false;
+    }
+
+    private void ParseQueryParams()
+    {
+        var qs = Nav.Uri;
+        var idx = qs.IndexOf('?');
+        if (idx < 0) return;
+
+        var pairs = qs[(idx + 1)..].Split('&');
+        foreach (var pair in pairs)
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length != 2) continue;
+            var key = Uri.UnescapeDataString(parts[0]);
+            var val = Uri.UnescapeDataString(parts[1]);
+
+            if (key == "inner_tab") activeTab = val;
+            else if (key == "list_id" && int.TryParse(val, out var lid)) selectedListId = lid;
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            allLists = await ListsService.GetListsAsync();
+        }
+        catch
+        {
+            allLists = [];
+            await AuthService.LogoutAsync();
+            Nav.NavigateTo("login");
+            return;
+        }
+
+        await LoadListStateAsync();
+
+        if (isMyListsTab && !isCustomListView)
+            return;
+
+        var listId = selectedListId ?? GetDefaultListId(activeTab);
+        if (listId.HasValue)
+        {
+            currentListName = allLists.FirstOrDefault(l => l.Id == listId.Value)?.Name ?? "";
+            try
+            {
+                currentItems = await ListsService.GetListItemsAsync(listId.Value, string.IsNullOrEmpty(mediaFilter) ? null : mediaFilter);
+            }
+            catch
+            {
+                currentItems = [];
+            }
+        }
+    }
+
+    private int? GetDefaultListId(string tab)
+    {
+        return allLists.FirstOrDefault(l => l.ListType == tab)?.Id;
+    }
+
+    private static string GetPosterUrl(string? posterPath, string size = "w342")
+    {
+        return $"https://image.tmdb.org/t/p/{size}{posterPath}";
+    }
+
+    private void GoToMyLists() => SwitchTab("");
+    private void GoToWatchlist() => SwitchTab("watchlist");
+    private void GoToWatched() => SwitchTab("watched");
+    private void GoToLiked() => SwitchTab("liked");
+
+    private void ToggleFilters() => showFilters = !showFilters;
+
+    private void HandleSortChanged(string order)
+    {
+        _sortOrder = order;
+    }
+
+    private void GoToCustomList(int id)
+    {
+        activeTab = "custom_lists";
+        selectedListId = id;
+        mediaFilter = "";
+        currentListName = allLists.FirstOrDefault(l => l.Id == id)?.Name ?? "";
+        Nav.NavigateTo($"listas?inner_tab=custom_lists&list_id={id}");
+        _ = Reload();
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+        selectedListId = null;
+        mediaFilter = "";
+        Nav.NavigateTo(tab == "" ? "listas" : $"listas?inner_tab={tab}");
+        _ = Reload();
+    }
+
+    private async Task Reload()
+    {
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private async Task LoadListStateAsync()
+    {
+        _likedKeys = [];
+        _watchedKeys = [];
+        var likedListId = allLists.FirstOrDefault(l => l.ListType == "liked")?.Id;
+        var watchedListId = allLists.FirstOrDefault(l => l.ListType == "watched")?.Id;
+        var tasks = new List<Task>();
+
+        if (likedListId.HasValue)
+            tasks.Add(LoadLikedAsync(likedListId.Value));
+        if (watchedListId.HasValue)
+            tasks.Add(LoadWatchedAsync(watchedListId.Value));
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task LoadLikedAsync(int listId)
+    {
+        try
+        {
+            var items = await ListsService.GetListItemsAsync(listId);
+            _likedKeys = items.Select(i => $"{i.TmdbId}:{i.MediaType}").ToHashSet();
+        }
+        catch { _likedKeys = []; }
+    }
+
+    private async Task LoadWatchedAsync(int listId)
+    {
+        try
+        {
+            var items = await ListsService.GetListItemsAsync(listId);
+            _watchedKeys = items.Select(i => $"{i.TmdbId}:{i.MediaType}").ToHashSet();
+        }
+        catch { _watchedKeys = []; }
+    }
+
+    private async Task LoadInAnyListKeysAsync()
+    {
+        _inAnyListKeys = [];
+        var watchlistId = allLists.FirstOrDefault(l => l.ListType == "watchlist")?.Id;
+        var tasks = new List<Task>();
+        if (watchlistId.HasValue)
+            tasks.Add(LoadInAnyListBucketAsync(watchlistId.Value));
+        foreach (var cl in allLists.Where(l => l.ListType == "custom"))
+            tasks.Add(LoadInAnyListBucketAsync(cl.Id));
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task LoadInAnyListBucketAsync(int listId)
+    {
+        try
+        {
+            var items = await ListsService.GetListItemsAsync(listId);
+            foreach (var i in items)
+                _inAnyListKeys.Add($"{i.TmdbId}:{i.MediaType}");
+        }
+        catch { }
+    }
+
+    private async Task ToggleLikedItem(ListItemModel item)
+    {
+        var likedListId = allLists.FirstOrDefault(l => l.ListType == "liked")?.Id;
+        if (!likedListId.HasValue) return;
+        var key = $"{item.TmdbId}:{item.MediaType}";
+        try
+        {
+            if (_likedKeys.Contains(key))
+            {
+                _likedKeys.Remove(key);
+                var items = await ListsService.GetListItemsAsync(likedListId.Value);
+                var li = items.FirstOrDefault(i => i.TmdbId == item.TmdbId && i.MediaType == item.MediaType);
+                if (li is not null)
+                    await ListsService.RemoveItemFromListAsync(likedListId.Value, li.Id);
+                await Tmdb.VoteAsync(item.MediaType, item.TmdbId, null);
+                if (activeTab == "liked")
+                    await LoadData();
+            }
+            else
+            {
+                _likedKeys.Add(key);
+                if (_dislikedKeys.Contains(key))
+                    _dislikedKeys.Remove(key);
+                await ListsService.AddItemToListAsync(likedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath);
+                await Tmdb.VoteAsync(item.MediaType, item.TmdbId, 10);
+            }
+        }
+        catch { }
+    }
+
+    private async Task ToggleDislikedItem(ListItemModel item)
+    {
+        var key = $"{item.TmdbId}:{item.MediaType}";
+        try
+        {
+            if (_dislikedKeys.Contains(key))
+            {
+                _dislikedKeys.Remove(key);
+                await Tmdb.VoteAsync(item.MediaType, item.TmdbId, null);
+            }
+            else
+            {
+                _dislikedKeys.Add(key);
+                if (_likedKeys.Contains(key))
+                {
+                    _likedKeys.Remove(key);
+                    var likedListId = allLists.FirstOrDefault(l => l.ListType == "liked")?.Id;
+                    if (likedListId.HasValue)
+                    {
+                        var items = await ListsService.GetListItemsAsync(likedListId.Value);
+                        var li = items.FirstOrDefault(i => i.TmdbId == item.TmdbId && i.MediaType == item.MediaType);
+                        if (li is not null)
+                            await ListsService.RemoveItemFromListAsync(likedListId.Value, li.Id);
+                    }
+                    if (activeTab == "liked")
+                        await LoadData();
+                }
+                await Tmdb.VoteAsync(item.MediaType, item.TmdbId, 0);
+            }
+        }
+        catch { }
+    }
+
+    private async Task ToggleWatchedItem(ListItemModel item)
+    {
+        var watchedListId = allLists.FirstOrDefault(l => l.ListType == "watched")?.Id;
+        if (!watchedListId.HasValue) return;
+        var key = $"{item.TmdbId}:{item.MediaType}";
+        try
+        {
+            if (_watchedKeys.Contains(key))
+            {
+                _watchedKeys.Remove(key);
+                var items = await ListsService.GetListItemsAsync(watchedListId.Value);
+                var li = items.FirstOrDefault(i => i.TmdbId == item.TmdbId && i.MediaType == item.MediaType);
+                if (li is not null)
+                    await ListsService.RemoveItemFromListAsync(watchedListId.Value, li.Id);
+                if (activeTab == "watched")
+                    await LoadData();
+                if (item.MediaType == "tv")
+                    await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, false);
+            }
+            else
+            {
+                await ListsService.AddItemToListAsync(watchedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath);
+                _watchedKeys.Add(key);
+                if (item.MediaType == "tv")
+                    await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, true);
+            }
+        }
+        catch { }
+    }
+
+    private ListItemModel? _listSelectorItem;
+    private Dictionary<int, int>? listItemIds;
+    private int? watchlistListId;
+    private bool showCustomModal;
+    private bool showNewListForm;
+    private bool actionLoading;
+
+    private async Task OpenListSelector(ListItemModel item)
+    {
+        _listSelectorItem = item;
+        showCustomModal = true;
+        await LoadLists();
+        StateHasChanged();
+    }
+
+    private async Task CloseListSelector()
+    {
+        showCustomModal = false;
+        showNewListForm = false;
+        newListName = "";
+        _listSelectorItem = null;
+        await LoadData();
+        await LoadListStateAsync();
+        await LoadInAnyListKeysAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadLists()
+    {
+        try
+        {
+            allLists = await ListsService.GetListsAsync();
+            watchlistListId = allLists.FirstOrDefault(l => l.ListType == "watchlist")?.Id;
+            listItemIds = [];
+            if (_listSelectorItem is not null)
+            {
+                foreach (var list in allLists.Where(l => l.ListType == "watchlist" || l.ListType == "custom"))
+                {
+                    var items = await ListsService.GetListItemsAsync(list.Id);
+                    var match = items.FirstOrDefault(i => i.TmdbId == _listSelectorItem.TmdbId);
+                    if (match is not null)
+                        listItemIds[list.Id] = match.Id;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task AddToCustomList(int listId)
+    {
+        if (_listSelectorItem is null) return;
+        actionLoading = true;
+        try
+        {
+            if (listItemIds?.ContainsKey(listId) == true)
+            {
+                await ListsService.RemoveItemFromListAsync(listId, listItemIds[listId]);
+                listItemIds.Remove(listId);
+            }
+            else
+            {
+                var item = await ListsService.AddItemToListAsync(
+                    listId, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath);
+                (listItemIds ??= [])[listId] = item.Id;
+            }
+        }
+        catch { }
+        actionLoading = false;
+    }
+
+    private async Task CreateNewListAndAdd()
+    {
+        if (string.IsNullOrWhiteSpace(newListName) || _listSelectorItem is null) return;
+        actionLoading = true;
+        try
+        {
+            var newList = await ListsService.CreateListAsync(newListName, null);
+            var item = await ListsService.AddItemToListAsync(
+                newList.Id, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath);
+            allLists.Add(new ListInfo
+            {
+                Id = newList.Id,
+                Name = newList.Name,
+                Description = newList.Description,
+                ListType = newList.ListType
+            });
+            (listItemIds ??= [])[newList.Id] = item.Id;
+            newListName = "";
+            showNewListForm = false;
+        }
+        catch { }
+        actionLoading = false;
+    }
+
+    private int GetFilteredCount() => mediaFilter switch
+    {
+        "movie" => currentItems.Count(i => i.MediaType == "movie"),
+        "tv" => currentItems.Count(i => i.MediaType == "tv"),
+        _ => currentItems.Count
+    };
+
+    private async Task FilterAll() { mediaFilter = ""; await LoadData(); }
+    private async Task FilterMovies() { mediaFilter = "movie"; await LoadData(); }
+    private async Task FilterSeries() { mediaFilter = "tv"; await LoadData(); }
+
+    private async Task HandleCreateList()
+    {
+        if (string.IsNullOrWhiteSpace(newListName)) return;
+        creating = true;
+        try
+        {
+            await ListsService.CreateListAsync(newListName.Trim(), string.IsNullOrWhiteSpace(newListDescription) ? null : newListDescription.Trim());
+            showCreateDialog = false;
+            newListName = "";
+            newListDescription = "";
+        }
+        catch { }
+        creating = false;
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private void CancelCreate() => showCreateDialog = false;
+
+    private void StartEditList(ListInfo list)
+    {
+        editingList = list;
+        editListName = list.Name;
+        editListDescription = list.Description;
+        showEditDialog = true;
+    }
+
+    private void CancelEdit() => showEditDialog = false;
+
+    private async Task HandleEditList()
+    {
+        if (editingList == null || string.IsNullOrWhiteSpace(editListName)) return;
+        editing = true;
+        try
+        {
+            await ListsService.UpdateListAsync(editingList.Id, editListName.Trim(), string.IsNullOrWhiteSpace(editListDescription) ? "" : editListDescription.Trim());
+            showEditDialog = false;
+            editingList = null;
+        }
+        catch { }
+        editing = false;
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private void DeleteList(ListInfo list)
+    {
+        deleteTarget = list;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete() => showDeleteConfirm = false;
+
+    private async Task HandleDeleteList()
+    {
+        if (deleteTarget == null) return;
+        deleting = true;
+        try
+        {
+            await ListsService.DeleteListAsync(deleteTarget.Id);
+            showDeleteConfirm = false;
+            deleteTarget = null;
+        }
+        catch { }
+        deleting = false;
+        GoToMyLists();
+    }
+
+    private void GoToDetail(ListItemModel item)
+    {
+        Nav.NavigateTo($"media/{item.MediaType}/{item.TmdbId}");
+    }
+
+    private int GetListCount(string listType) =>
+        allLists.FirstOrDefault(l => l.ListType == listType)?.ItemCount ?? 0;
+
+    private async Task RemoveItem(ListItemModel item)
+    {
+        var listId = selectedListId ?? GetDefaultListId(activeTab);
+        if (listId == null) return;
+        try
+        {
+            await ListsService.RemoveItemFromListAsync(listId.Value, item.Id);
+        }
+        catch { }
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private async Task ShareList()
+    {
+        var url = Nav.Uri;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        }
+        catch
+        {
+            // fallback: ignore
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusAddTitlesSearch)
+        {
+            _focusAddTitlesSearch = false;
+            await addTitlesSearchRef.FocusAsync();
+        }
+    }
+
+    private async Task OpenAddTitlesModal()
+    {
+        addTitlesSearch = "";
+        addTitlesResults = [];
+        addTitlesInList.Clear();
+        addTitlesItemIds.Clear();
+        showAddTitlesModal = true;
+        _focusAddTitlesSearch = true;
+        addTitlesLoading = true;
+        try
+        {
+            foreach (var i in currentItems)
+                addTitlesItemIds[$"{i.TmdbId}:{i.MediaType}"] = i.Id;
+            var trending = await Tmdb.GetTrendingAsync();
+            _addTitlesTrendingCache = trending.Where(i => i.MediaType == "movie" || i.MediaType == "tv").Take(20).ToList();
+            addTitlesResults = [.. _addTitlesTrendingCache];
+            MarkResultsInList();
+        }
+        catch { }
+        addTitlesLoading = false;
+    }
+
+    private void CancelAddTitles()
+    {
+        _addTitlesCts?.Cancel();
+        showAddTitlesModal = false;
+    }
+
+    private async Task OnAddTitlesSearchChanged()
+    {
+        _addTitlesCts?.Cancel();
+        if (addTitlesSearch.Length < 3)
+        {
+            addTitlesResults = [.. _addTitlesTrendingCache];
+            MarkResultsInList();
+            return;
+        }
+        _addTitlesCts = new CancellationTokenSource();
+        var token = _addTitlesCts.Token;
+        addTitlesLoading = true;
+        try
+        {
+            await Task.Delay(300, token);
+            if (!token.IsCancellationRequested)
+            {
+                var results = await Tmdb.SearchAsync(addTitlesSearch);
+                addTitlesResults = results.Where(i => i.MediaType == "movie" || i.MediaType == "tv").Take(20).ToList();
+                MarkResultsInList();
+            }
+        }
+        catch (TaskCanceledException) { }
+        addTitlesLoading = false;
+    }
+
+    private void MarkResultsInList()
+    {
+        foreach (var item in addTitlesResults)
+        {
+            var key = $"{item.Id}:{item.MediaType}";
+            if (addTitlesItemIds.ContainsKey(key))
+                addTitlesInList.Add(key);
+        }
+    }
+
+    private async Task ToggleAddTitle(TmdbMediaItem item)
+    {
+        var listId = selectedListId;
+        if (listId == null) return;
+        var key = $"{item.Id}:{item.MediaType}";
+        if (addTitlesInList.Contains(key))
+        {
+            if (addTitlesItemIds.TryGetValue(key, out var listItemId))
+            {
+                try
+                {
+                    await ListsService.RemoveItemFromListAsync(listId.Value, listItemId);
+                    addTitlesInList.Remove(key);
+                }
+                catch { }
+            }
+        }
+        else
+        {
+            try
+            {
+                await ListsService.AddItemToListAsync(
+                    listId.Value, item.Id, item.MediaType, item.Title, item.PosterPath);
+                addTitlesInList.Add(key);
+            }
+            catch { }
+        }
+    }
+
+    private async Task HandleAddTitles()
+    {
+        showAddTitlesModal = false;
+        await LoadData();
+        StateHasChanged();
+    }
+}
