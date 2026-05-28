@@ -45,7 +45,7 @@ namespace EkaTrack.Client.Services
             }
         }
 
-        public async Task<bool> LoginAsync(string credential, string password)
+        public async Task<(bool Success, string? Error)> LoginAsync(string credential, string password)
         {
             var response = await _http.PostAsJsonAsync("/login", new
             {
@@ -62,10 +62,10 @@ namespace EkaTrack.Client.Services
                 SetAuthHeader();
                 await _js.InvokeVoidAsync("localStorage.setItem", "user_id", result.User.Id.ToString());
                 await _js.InvokeVoidAsync("localStorage.setItem", "username", result.User.Username);
-                return true;
+                return (true, null);
             }
 
-            return false;
+            return (false, result?.Message ?? "Error de conexión");
         }
 
         public async Task<bool> RegisterAsync(string username, string email, string password, string samePassword)
@@ -106,6 +106,7 @@ namespace EkaTrack.Client.Services
         private class AuthResponse
         {
             public int Status { get; set; }
+            public string? Message { get; set; }
             public UserData? User { get; set; }
         }
 

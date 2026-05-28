@@ -49,6 +49,25 @@
             <i class="fa-solid fa-thumbs-down" style="font-size: 13px;"></i>
         </button>
     </div>
+
+    <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+                background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+                opacity: @(hover ? "1" : "0");
+                transition: opacity 0.3s ease-in-out;
+                pointer-events: none;"></div>
+
+    @if (VoteAverage.HasValue)
+    {
+        <div style="position: absolute; bottom: 0; left: 0; padding: 8px;
+                    opacity: @(hover ? "1" : "0");
+                    transition: opacity 0.3s ease-in-out;
+                    pointer-events: none;">
+            <span style="background: #cea235; color: #1e1c33; font-weight: bold;
+                         padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">
+                @VoteAverage.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+            </span>
+        </div>
+    }
 </div>
 
 @code {
@@ -70,6 +89,8 @@
     [Parameter] public EventCallback OnToggleDisliked { get; set; }
     [Parameter] public EventCallback OnOpenLists { get; set; }
     [Parameter] public EventCallback OnToggleWatched { get; set; }
+
+    [Parameter] public double? VoteAverage { get; set; }
 
     [Parameter] public string PosterSize { get; set; } = "w342";
 

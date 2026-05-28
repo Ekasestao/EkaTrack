@@ -2,6 +2,7 @@
 @rendermode InteractiveWebAssembly
 @inject AuthService AuthService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <div class="login-wrapper">
     <div class="login-card">
@@ -29,14 +30,14 @@
             <input id="password" type="password" @bind="password" @bind:event="oninput" placeholder="••••••••" />
         </div>
 
-        <button class="login-button" @onclick="HandleLogin" disabled="@loading">
+        <button class="login-button" @onclick="HandleLogin" disabled="@(loading || IsLockedOut)">
             @if (loading)
             {
                 <span class="spinner"></span>
             }
             @if (!loading)
             {
-                <span>Entrar</span>
+                <span>@(IsLockedOut ? "Bloqueado" : "Entrar")</span>
             }
         </button>
     </div>
@@ -162,14 +163,46 @@
     }
 </style>
 
+@implements IDisposable
+
 @code {
     private string credential = "";
     private string password = "";
     private string errorMessage = "";
     private bool loading = false;
 
+    private const int MaxAttempts = 5;
+    private const int LockoutMinutes = 1;
+    private int _failCount;
+    private DateTime? _lockoutEnd;
+    private Timer? _lockoutTimer;
+
+    private string LockoutDisplay
+    {
+        get
+        {
+            if (_lockoutEnd is null) return "";
+            var remaining = _lockoutEnd.Value - DateTime.Now;
+            if (remaining.TotalSeconds <= 0) return "";
+            return $"Demasiados intentos. Intenta de nuevo en {remaining.Seconds} s.";
+        }
+    }
+
+    private bool IsLockedOut => _lockoutEnd.HasValue && _lockoutEnd.Value > DateTime.Now;
+
     protected override async Task OnInitializedAsync()
     {
+        var stored = await JS.InvokeAsync<string>("localStorage.getItem", "login_fail_count");
+        if (int.TryParse(stored, out var count))
+            _failCount = count;
+
+        var lockout = await JS.InvokeAsync<string>("localStorage.getItem", "login_lockout_end");
+        if (long.TryParse(lockout, out var ticks))
+            _lockoutEnd = new DateTime(ticks, DateTimeKind.Local);
+
+        if (IsLockedOut)
+            StartLockoutTimer();
+
         await AuthService.InitAsync();
         if (AuthService.IsLoggedIn)
             Nav.NavigateTo("");
@@ -180,13 +213,59 @@
         errorMessage = "";
         loading = true;
 
-        var success = await AuthService.LoginAsync(credential, password);
+        var (success, error) = await AuthService.LoginAsync(credential, password);
 
         if (success)
+        {
+            _failCount = 0;
+            _lockoutEnd = null;
+            _lockoutTimer?.Dispose();
+            _lockoutTimer = null;
+            await JS.InvokeVoidAsync("localStorage.removeItem", "login_fail_count");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "login_lockout_end");
             Nav.NavigateTo("");
+        }
         else
-            errorMessage = "Credenciales incorrectas. Inténtalo de nuevo.";
+        {
+            _failCount++;
+            await JS.InvokeVoidAsync("localStorage.setItem", "login_fail_count", _failCount.ToString());
+
+            if (_failCount >= MaxAttempts)
+            {
+                _lockoutEnd = DateTime.Now.AddMinutes(LockoutMinutes);
+                await JS.InvokeVoidAsync("localStorage.setItem", "login_lockout_end", _lockoutEnd.Value.Ticks.ToString());
+                StartLockoutTimer();
+                errorMessage = LockoutDisplay;
+            }
+            else
+            {
+                errorMessage = error ?? "Credenciales incorrectas. Inténtalo de nuevo.";
+            }
+        }
 
         loading = false;
+    }
+
+    private void StartLockoutTimer()
+    {
+        _lockoutTimer?.Dispose();
+        _lockoutTimer = new Timer(_ =>
+        {
+            if (!IsLockedOut)
+            {
+                _lockoutTimer?.Dispose();
+                _lockoutTimer = null;
+                _failCount = 0;
+                JS.InvokeVoidAsync("localStorage.removeItem", "login_fail_count");
+                JS.InvokeVoidAsync("localStorage.removeItem", "login_lockout_end");
+                errorMessage = "";
+            }
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+    }
+
+    public void Dispose()
+    {
+        _lockoutTimer?.Dispose();
     }
 }

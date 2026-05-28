@@ -19,7 +19,7 @@ CORS(
     supports_credentials=True,
     origins=[
         "https://localhost:7094",
-        "http://localhost:7094/",
+        "http://localhost:7094",
         "https://ekasestao.github.io",
     ],
     allow_headers=["Content-Type", "Authorization", "X-User-Id"],
@@ -165,6 +165,60 @@ def health():
     return jsonify({"status": 200, "message": "Healthy"})
 
 
+# ─── Brute-force protection ─────────────────────────────────────────────────
+
+import threading
+from collections import defaultdict
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_lockout_durations = [60, 120, 300, 600, 1800, 3600]
+_attempt_limit = 5
+_cleanup_interval = 3600
+_last_cleanup = time.time()
+_lock = threading.Lock()
+
+
+def _cleanup_old_attempts():
+    global _last_cleanup
+    now = time.time()
+    if now - _last_cleanup < _cleanup_interval:
+        return
+    cutoff = now - max(_lockout_durations)
+    for ip in list(_login_attempts.keys()):
+        _login_attempts[ip] = [t for t in _login_attempts[ip] if t > cutoff]
+        if not _login_attempts[ip]:
+            del _login_attempts[ip]
+    _last_cleanup = now
+
+
+def _get_client_ip() -> str:
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+
+
+def _get_lockout_seconds(ip: str) -> int:
+    attempts = _login_attempts.get(ip, [])
+    if len(attempts) < _attempt_limit:
+        return 0
+    recent = [t for t in attempts if t > time.time() - max(_lockout_durations)]
+    if len(recent) < _attempt_limit:
+        return 0
+    offence = (len(recent) - _attempt_limit) // _attempt_limit
+    duration = _lockout_durations[min(offence, len(_lockout_durations) - 1)]
+    elapsed = time.time() - recent[0]
+    remaining = int(duration - elapsed)
+    return max(remaining, 0)
+
+
+def _record_attempt(ip: str, success: bool):
+    now = time.time()
+    with _lock:
+        if success:
+            _login_attempts.pop(ip, None)
+        else:
+            _login_attempts[ip].append(now)
+            _cleanup_old_attempts()
+
+
 # ─── Auth ──────────────────────────────────────────────────────────────────
 
 
@@ -175,6 +229,17 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
+    ip = _get_client_ip()
+    remaining = _get_lockout_seconds(ip)
+    if remaining > 0:
+        minutes = remaining // 60
+        seconds = remaining % 60
+        if minutes > 0:
+            msg = f"Demasiados intentos. Intenta de nuevo en {minutes} min {seconds} s."
+        else:
+            msg = f"Demasiados intentos. Intenta de nuevo en {seconds} s."
+        return jsonify({"status": 429, "message": msg}), 429
+
     data = request.json
     credential = data.get("login_credential", "").strip()
     password = data.get("password", "")
@@ -187,10 +252,13 @@ def login():
     conn.close()
 
     if not user:
+        _record_attempt(ip, False)
         return jsonify({"status": 404, "message": "Usuario no encontrado"}), 404
     if not check_password_hash(user["password"], password):
+        _record_attempt(ip, False)
         return jsonify({"status": 401, "message": "Contraseña incorrecta"}), 401
 
+    _record_attempt(ip, True)
     session["user_id"] = user["id"]
     session["username"] = user["username"]
 

@@ -83,6 +83,7 @@ else
                     var key = $"{item.Id}:{item.MediaType}";
                     <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                         <MediaCard Id="@item.Id" MediaType="@item.MediaType" Title="@item.Title" PosterPath="@item.PosterPath"
+                                   VoteAverage="@item.VoteAverage"
                                    IsLiked="_likedKeys.Contains(key)" IsDisliked="_dislikedKeys.Contains(key)"
                                    IsInAnyList="_inAnyListKeys.Contains(key)"
                                    IsWatched="_watchedKeys.Contains(key)"

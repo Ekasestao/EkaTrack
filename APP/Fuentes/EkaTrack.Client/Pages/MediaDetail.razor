@@ -31,7 +31,7 @@
         <div class="spinner-border text-warning" role="status"></div>
     </div>
 }
-@if (detail is null)
+else if (detail is null)
 {
     <div class="text-center py-5" style="color: #888;">
         <p>No se encontró el contenido solicitado.</p>
@@ -333,7 +333,7 @@ else
                         @foreach (var member in detail.Credits.Cast.Take(10))
                         {
                             <div class="col-6 col-sm-4 col-md-3 col-lg-2">
-                                <div class="text-center p-2" style="background: #1e1c33; border: 1px solid #2d2b4a; border-radius: 8px;">
+                                <div class="text-center p-2" style="background: #222C38; border: 1px solid #2B333D; border-radius: 8px;">
                                     @if (!string.IsNullOrEmpty(member.ProfilePath))
                                     {
                                         <img src="https://image.tmdb.org/t/p/w185@(member.ProfilePath)"
@@ -343,7 +343,7 @@ else
                                     else
                                     {
                                         <div class="rounded-circle mb-1 d-flex align-items-center justify-content-center mx-auto"
-                                             style="width: 60px; height: 60px; background: #2d2b4a;">
+                                             style="width: 60px; height: 60px; background: #2B333D;">
                                             <span style="color: #666; font-size: 1.5rem;">?</span>
                                         </div>
                                     }
