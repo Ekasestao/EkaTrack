@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from secretKey import secret_key, api_key, api_url, api_url_tvmaze, database
+from itsdangerous import URLSafeTimedSerializer
 import sqlite3
 import requests
 import json
@@ -9,11 +10,16 @@ import time
 from datetime import datetime
 import re
 
+token_serializer = URLSafeTimedSerializer(secret_key, salt="auth")
+TOKEN_MAX_AGE = 2592000  # 30 días
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = secret_key
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = 2592000
 CORS(
     app,
     supports_credentials=True,
@@ -22,8 +28,22 @@ CORS(
         "http://localhost:7094",
         "https://ekasestao.github.io",
     ],
-    allow_headers=["Content-Type", "Authorization", "X-User-Id"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; frame-ancestors 'none'"
+    )
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 TMDB_API_KEY = api_key
 TMDB_BASE_URL = api_url
@@ -129,8 +149,51 @@ def init_db():
     try:
         conn.execute("ALTER TABLE list_items ADD COLUMN tvmaze_show_id INTEGER")
         conn.commit()
-    except:
+    except sqlite3.OperationalError:
         pass
+
+    # Migration: add vote_average to list_items if not present
+    try:
+        conn.execute("ALTER TABLE list_items ADD COLUMN vote_average REAL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Backfill vote_average for existing items via TMDB
+    missing = conn.execute(
+        "SELECT id, tmdb_id, media_type, title FROM list_items WHERE vote_average IS NULL OR vote_average <= 0"
+    ).fetchall()
+    if missing:
+        for row in missing:
+            try:
+                url = f"{TMDB_BASE_URL}/{row['media_type']}/{row['tmdb_id']}"
+                data = tmdb_get_json(url, {"api_key": TMDB_API_KEY})
+                va = data.get("vote_average")
+                if va and va > 0:
+                    conn.execute(
+                        "UPDATE list_items SET vote_average = ? WHERE id = ?",
+                        (va, row["id"]),
+                    )
+                    conn.commit()
+                elif row["media_type"] == "tv":
+                    tvmaze_url = f"{TVMAZE_BASE_URL}/singlesearch/shows"
+                    tvmaze_resp = requests.get(
+                        tvmaze_url,
+                        params={"q": row["title"]},
+                        timeout=10,
+                    )
+                    if tvmaze_resp.ok:
+                        tvmaze_show = tvmaze_resp.json()
+                        tvmaze_rating = tvmaze_show.get("rating", {}).get("average")
+                        if tvmaze_rating and tvmaze_rating > 0:
+                            conn.execute(
+                                "UPDATE list_items SET vote_average = ? WHERE id = ?",
+                                (tvmaze_rating, row["id"]),
+                            )
+                            conn.commit()
+                time.sleep(0.05)
+            except Exception:
+                continue
 
     conn.close()
 
@@ -196,17 +259,18 @@ def _get_client_ip() -> str:
 
 
 def _get_lockout_seconds(ip: str) -> int:
-    attempts = _login_attempts.get(ip, [])
-    if len(attempts) < _attempt_limit:
-        return 0
-    recent = [t for t in attempts if t > time.time() - max(_lockout_durations)]
-    if len(recent) < _attempt_limit:
-        return 0
-    offence = (len(recent) - _attempt_limit) // _attempt_limit
-    duration = _lockout_durations[min(offence, len(_lockout_durations) - 1)]
-    elapsed = time.time() - recent[0]
-    remaining = int(duration - elapsed)
-    return max(remaining, 0)
+    with _lock:
+        attempts = _login_attempts.get(ip, [])
+        if len(attempts) < _attempt_limit:
+            return 0
+        recent = [t for t in attempts if t > time.time() - max(_lockout_durations)]
+        if len(recent) < _attempt_limit:
+            return 0
+        offence = (len(recent) - _attempt_limit) // _attempt_limit
+        duration = _lockout_durations[min(offence, len(_lockout_durations) - 1)]
+        elapsed = time.time() - recent[0]
+        remaining = int(duration - elapsed)
+        return max(remaining, 0)
 
 
 def _record_attempt(ip: str, success: bool):
@@ -241,8 +305,12 @@ def login():
         return jsonify({"status": 429, "message": msg}), 429
 
     data = request.json
-    credential = data.get("login_credential", "").strip()
-    password = data.get("password", "")
+    credential = (data.get("login_credential") or "").strip()
+    password = data.get("password") or ""
+
+    if not credential or not password:
+        _record_attempt(ip, False)
+        return jsonify({"status": 400, "message": "Credencial y contraseña requeridos"}), 400
 
     conn = get_db()
     user = conn.execute(
@@ -259,10 +327,13 @@ def login():
         return jsonify({"status": 401, "message": "Contraseña incorrecta"}), 401
 
     _record_attempt(ip, True)
+    session.permanent = True
     session["user_id"] = user["id"]
     session["username"] = user["username"]
 
     ensure_default_lists(user["id"])
+
+    token = token_serializer.dumps({"user_id": user["id"], "username": user["username"]})
 
     return jsonify(
         {
@@ -272,6 +343,7 @@ def login():
                 "username": user["username"],
                 "email": user["email"],
             },
+            "token": token,
         }
     )
 
@@ -290,10 +362,20 @@ def me():
 
     ensure_default_lists(user_id)
 
+    username = session.get("username")
+    if username is None:
+        conn = get_db()
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        conn.close()
+        username = row["username"] if row else None
+
+    token = token_serializer.dumps({"user_id": user_id, "username": username})
+
     return jsonify(
         {
             "status": 200,
-            "user": {"id": user_id, "username": session.get("username", "")},
+            "user": {"id": user_id, "username": username},
+            "token": token,
         }
     )
 
@@ -439,7 +521,7 @@ def media_detail(media_type, tmdb_id):
                 t = r.get("title")
                 if t and t not in search_terms:
                     search_terms.append(t)
-        except:
+        except requests.RequestException:
             pass
 
         # Search TVmaze by each term
@@ -457,7 +539,7 @@ def media_detail(media_type, tmdb_id):
                 )
                 if r.ok:
                     tvmaze_show = r.json()
-            except:
+            except requests.RequestException:
                 continue
 
         if tvmaze_show:
@@ -532,7 +614,7 @@ def media_detail(media_type, tmdb_id):
             if v.get("type") == "Trailer" and v.get("site") == "YouTube":
                 trailer = {"key": v["key"], "name": v.get("name")}
                 break
-    except:
+    except requests.RequestException:
         pass
     data["trailer"] = trailer
 
@@ -597,7 +679,7 @@ def tvmaze_show(tmdb_id):
             {"api_key": TMDB_API_KEY},
         )
         imdb_id = ext_data.get("imdb_id")
-    except:
+    except requests.RequestException:
         pass
 
     # 2. Lookup TVmaze show by IMDb ID, fallback by name
@@ -612,7 +694,7 @@ def tvmaze_show(tmdb_id):
             )
             if lookup_resp.ok:
                 tvmaze_show = lookup_resp.json()
-        except:
+        except requests.RequestException:
             pass
 
     if not tvmaze_show:
@@ -657,7 +739,7 @@ def tvmaze_show(tmdb_id):
                         if search_resp.ok:
                             tvmaze_show = search_resp.json()
                             break
-                    except:
+                    except requests.RequestException:
                         continue
 
                 # 3. Fallback: TVmaze /search/shows (plural, returns multiple results)
@@ -684,9 +766,9 @@ def tvmaze_show(tmdb_id):
                                         continue
                                 tvmaze_show = show
                                 break
-                    except:
+                    except requests.RequestException:
                         pass
-        except:
+        except requests.RequestException:
             pass
 
     if not tvmaze_show:
@@ -702,7 +784,7 @@ def tvmaze_show(tmdb_id):
         if not seasons_resp.ok:
             return jsonify({"tvmaze_id": tvmaze_id, "seasons": []})
         seasons_data = seasons_resp.json()
-    except:
+    except requests.RequestException:
         return jsonify({"tvmaze_id": tvmaze_id, "seasons": []})
 
     # 4. Get watched episodes for this user from local DB
@@ -740,7 +822,7 @@ def tvmaze_show(tmdb_id):
                 airdate = ep.get("air_date")
                 if airdate:
                     tmdb_by_date.setdefault(airdate, {})[ep_num] = data
-    except:
+    except Exception:
         pass
 
     def tmdb_ep_info(season_number, ep_num, airdate):
@@ -808,7 +890,7 @@ def tvmaze_show(tmdb_id):
                             "watched": ep["id"] in watched_episodes,
                         }
                     )
-        except:
+        except Exception:
             pass
 
         result_seasons.append(
@@ -891,7 +973,7 @@ def _tvmaze_fallback(tmdb_id):
                             "watched": syn_id in watched_fallback,
                         }
                     )
-            except:
+            except Exception:
                 pass
 
             result_seasons.append(
@@ -910,7 +992,7 @@ def _tvmaze_fallback(tmdb_id):
             )
 
         return jsonify({"tvmaze_id": 0, "seasons": result_seasons})
-    except:
+    except Exception:
         return jsonify({"tvmaze_id": 0, "seasons": []})
 
 
@@ -1022,7 +1104,7 @@ def get_or_create_guest_session(user_id):
             conn.commit()
             conn.close()
             return gs_id
-    except:
+    except Exception:
         pass
     conn.close()
     return None
@@ -1059,7 +1141,7 @@ def tmdb_vote():
                 params={"api_key": TMDB_API_KEY, "guest_session_id": gs_id},
             )
         return jsonify({"status": resp.status_code, "success": resp.ok})
-    except:
+    except requests.RequestException:
         return jsonify({"status": 500, "message": "Error al conectar con TMDB"}), 500
 
 
@@ -1067,13 +1149,15 @@ def tmdb_vote():
 
 
 def get_user_id():
-    if "user_id" in session:
-        return session["user_id"]
-    uid = request.headers.get("X-User-Id")
-    if uid:
+    user_id = session.get("user_id")
+    if user_id is not None:
+        return user_id
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
         try:
-            return int(uid)
-        except (ValueError, TypeError):
+            data = token_serializer.loads(auth[7:], max_age=TOKEN_MAX_AGE)
+            return data["user_id"]
+        except Exception:
             pass
     return None
 
@@ -1145,20 +1229,14 @@ def handle_list(list_id):
 
     if request.method == "PATCH":
         data = request.json
-        fields = []
-        params = []
-        if "name" in data and data["name"]:
-            fields.append("name = ?")
-            params.append(data["name"].strip())
-        if "description" in data:
-            fields.append("description = ?")
-            params.append(data["description"].strip())
+        name = data["name"].strip() if data.get("name") else row["name"]
+        description = data.get("description", "").strip() if "description" in data else row["description"]
 
-        if fields:
-            params.append(list_id)
-            conn.execute(f"UPDATE lists SET {', '.join(fields)} WHERE id = ?", params)
-            conn.commit()
-
+        conn.execute(
+            "UPDATE lists SET name = ?, description = ? WHERE id = ?",
+            (name, description, list_id),
+        )
+        conn.commit()
         conn.close()
         return jsonify({"status": 200})
 
@@ -1200,13 +1278,16 @@ def handle_list_items(list_id):
 
     if request.method == "GET":
         media_type = request.args.get("media_type")
-        query = "SELECT * FROM list_items WHERE list_id = ?"
-        params = [list_id]
         if media_type in ("movie", "tv"):
-            query += " AND media_type = ?"
-            params.append(media_type)
-        query += " ORDER BY added_at DESC"
-        items = conn.execute(query, params).fetchall()
+            items = conn.execute(
+                "SELECT * FROM list_items WHERE list_id = ? AND media_type = ? ORDER BY added_at DESC",
+                (list_id, media_type),
+            ).fetchall()
+        else:
+            items = conn.execute(
+                "SELECT * FROM list_items WHERE list_id = ? ORDER BY added_at DESC",
+                (list_id,),
+            ).fetchall()
         conn.close()
         return jsonify([dict(i) for i in items])
 
@@ -1215,8 +1296,8 @@ def handle_list_items(list_id):
         try:
             cursor = conn.execute(
                 """
-                INSERT INTO list_items (list_id, tmdb_id, media_type, title, poster_path)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO list_items (list_id, tmdb_id, media_type, title, poster_path, vote_average)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     list_id,
@@ -1224,6 +1305,7 @@ def handle_list_items(list_id):
                     data["media_type"],
                     data["title"],
                     data.get("poster_path"),
+                    data.get("vote_average"),
                 ),
             )
             conn.commit()
@@ -1278,13 +1360,16 @@ def watchlist():
 
     if request.method == "GET":
         status_filter = request.args.get("status")
-        query = "SELECT * FROM watchlist WHERE user_id = ?"
-        params = [user_id]
         if status_filter in ("pending", "watched"):
-            query += " AND status = ?"
-            params.append(status_filter)
-        query += " ORDER BY added_at DESC"
-        items = conn.execute(query, params).fetchall()
+            items = conn.execute(
+                "SELECT * FROM watchlist WHERE user_id = ? AND status = ? ORDER BY added_at DESC",
+                (user_id, status_filter),
+            ).fetchall()
+        else:
+            items = conn.execute(
+                "SELECT * FROM watchlist WHERE user_id = ? ORDER BY added_at DESC",
+                (user_id,),
+            ).fetchall()
         conn.close()
         return jsonify([dict(i) for i in items])
 
@@ -1328,27 +1413,21 @@ def watchlist_item(item_id):
 
     if request.method == "PATCH":
         data = request.json
-        fields = []
-        params = []
-        if "status" in data:
-            fields.append("status = ?")
-            params.append(data["status"])
-            if data["status"] == "watched":
-                fields.append("watched_at = CURRENT_TIMESTAMP")
-        if "rating" in data:
-            fields.append("rating = ?")
-            params.append(data["rating"])
-        if "notes" in data:
-            fields.append("notes = ?")
-            params.append(data["notes"])
+        status = data.get("status", item["status"])
+        rating = data.get("rating", item["rating"])
+        notes = data.get("notes", item["notes"])
 
-        if fields:
-            params.append(item_id)
+        if "status" in data and data["status"] == "watched":
             conn.execute(
-                f"UPDATE watchlist SET {', '.join(fields)} WHERE id = ?", params
+                "UPDATE watchlist SET status = ?, rating = ?, notes = ?, watched_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (status, rating, notes, item_id),
             )
-            conn.commit()
-
+        else:
+            conn.execute(
+                "UPDATE watchlist SET status = ?, rating = ?, notes = ? WHERE id = ?",
+                (status, rating, notes, item_id),
+            )
+        conn.commit()
         conn.close()
         return jsonify({"status": 200})
 

@@ -19,6 +19,9 @@ public class ListItemModel
     [JsonPropertyName("poster_path")]
     public string? PosterPath { get; set; }
 
+    [JsonPropertyName("vote_average")]
+    public double? VoteAverage { get; set; }
+
     [JsonPropertyName("added_at")]
     public string AddedAt { get; set; } = "";
 }

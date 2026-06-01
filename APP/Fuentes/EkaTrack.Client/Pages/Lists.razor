@@ -141,18 +141,30 @@
 
         @if (showFilters)
         {
-            <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
-                @foreach (var opt in filterOptions)
-                {
-                    <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                          onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                        @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+            <div style="box-sizing: border-box; overflow: hidden; background: #111924; display: flex; flex-direction: column; width: 100vw; margin-left: calc(-50vw + 50%);">
+                <div style="height: 48px; display: flex; align-items: center; padding: 0 185px; gap: 12px; overflow-x: auto;">
+                    @foreach (var opt in filterOptions)
+                    {
+                        var isOpen = _openFilter == opt;
+                        <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px; background: @(isOpen ? "#2B333D" : "transparent");"
+                              onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='@(isOpen ? "#2B333D" : "transparent")'"
+                              @onclick="() => ToggleFilterOption(opt)">
+                            @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                        </span>
+                    }
+                    <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                          onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'"
+                          @onclick="ResetFilters">
+                        <i class="fa-solid fa-xmark"></i> Reinicializar
                     </span>
+                </div>
+
+                @if (_openFilter is not null)
+                {
+                    <div style="padding: 8px 185px 12px;">
+                        <span style="color: #888; font-size: 13px;">No disponible para listas</span>
+                    </div>
                 }
-                <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                    <i class="fa-solid fa-xmark"></i> Reinicializar
-                </span>
             </div>
         }
     </div>
@@ -198,6 +210,7 @@
             {
                 var key = $"{item.TmdbId}:{item.MediaType}";
                 <MediaCard Id="@item.TmdbId" MediaType="@item.MediaType" Title="@item.Title" PosterPath="@item.PosterPath"
+                           VoteAverage="@item.VoteAverage"
                            IsLiked="_likedKeys.Contains(key)" IsDisliked="_dislikedKeys.Contains(key)"
                            IsInAnyList="_inAnyListKeys.Contains(key)"
                            IsWatched="_watchedKeys.Contains(key)"
@@ -216,6 +229,7 @@
                 var key = $"{item.TmdbId}:{item.MediaType}";
                 <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                     <MediaCard Id="@item.TmdbId" MediaType="@item.MediaType" Title="@item.Title" PosterPath="@item.PosterPath"
+                               VoteAverage="@item.VoteAverage"
                                IsLiked="_likedKeys.Contains(key)" IsDisliked="_dislikedKeys.Contains(key)"
                                IsInAnyList="_inAnyListKeys.Contains(key)"
                                IsWatched="_watchedKeys.Contains(key)"
@@ -563,16 +577,12 @@
     private bool isCustomListView => activeTab == "custom_lists" && selectedListId.HasValue;
     private string mediaFilter = "";
     private bool showFilters;
+    private string? _openFilter;
     private string _sortOrder = "none";
     private readonly List<string> filterOptions =
     [
         "Año de estreno",
-        "Géneros",
-        "Precio",
-        "Calificación",
-        "País de producción",
-        "Duración",
-        "Clasificación por edades"
+        "Calificación"
     ];
 
     private List<ListInfo> allLists = [];
@@ -711,6 +721,16 @@
 
     private void ToggleFilters() => showFilters = !showFilters;
 
+    private void ToggleFilterOption(string opt)
+    {
+        _openFilter = _openFilter == opt ? null : opt;
+    }
+
+    private void ResetFilters()
+    {
+        _openFilter = null;
+    }
+
     private void HandleSortChanged(string order)
     {
         _sortOrder = order;
@@ -823,7 +843,7 @@
                 _likedKeys.Add(key);
                 if (_dislikedKeys.Contains(key))
                     _dislikedKeys.Remove(key);
-                await ListsService.AddItemToListAsync(likedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath);
+                await ListsService.AddItemToListAsync(likedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath, item.VoteAverage);
                 await Tmdb.VoteAsync(item.MediaType, item.TmdbId, 10);
             }
         }
@@ -884,7 +904,7 @@
             }
             else
             {
-                await ListsService.AddItemToListAsync(watchedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath);
+                await ListsService.AddItemToListAsync(watchedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath, item.VoteAverage);
                 _watchedKeys.Add(key);
                 if (item.MediaType == "tv")
                     await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, true);
@@ -955,7 +975,7 @@
             else
             {
                 var item = await ListsService.AddItemToListAsync(
-                    listId, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath);
+                    listId, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
                 (listItemIds ??= [])[listId] = item.Id;
             }
         }
@@ -971,7 +991,7 @@
         {
             var newList = await ListsService.CreateListAsync(newListName, null);
             var item = await ListsService.AddItemToListAsync(
-                newList.Id, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath);
+                newList.Id, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
             allLists.Add(new ListInfo
             {
                 Id = newList.Id,
@@ -1195,7 +1215,7 @@
             try
             {
                 await ListsService.AddItemToListAsync(
-                    listId.Value, item.Id, item.MediaType, item.Title, item.PosterPath);
+                    listId.Value, item.Id, item.MediaType, item.Title, item.PosterPath, item.VoteAverage);
                 addTitlesInList.Add(key);
             }
             catch { }

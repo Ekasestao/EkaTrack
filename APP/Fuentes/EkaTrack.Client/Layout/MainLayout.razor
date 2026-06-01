@@ -266,27 +266,17 @@
     {
         await AuthService.InitAsync();
 
-        if (!AuthService.IsLoggedIn)
-        {
-            var relativeUri = Nav.ToBaseRelativePath(Nav.Uri);
-            if (relativeUri is "login" or "register")
-            {
-                _ready = true;
-            }
-        }
-        else
+        var relativeUri = Nav.ToBaseRelativePath(Nav.Uri);
+        if (!AuthService.IsLoggedIn && relativeUri is not "login" and not "register")
         {
             _ready = true;
-            await LoadRecentItems();
-        }
-    }
-
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender && !_ready)
-        {
             Nav.NavigateTo("login");
+            return;
         }
+
+        _ready = true;
+        if (AuthService.IsLoggedIn)
+            await LoadRecentItems();
     }
 
     private async Task OnSearchAfterBind()

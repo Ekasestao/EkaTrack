@@ -9,9 +9,13 @@ builder.RootComponents.Add<Microsoft.AspNetCore.Components.Web.HeadOutlet>("head
 
 builder.Services.AddRadzenComponents();
 
-builder.Services.AddScoped(sp => new HttpClient
+builder.Services.AddScoped(sp =>
 {
-    BaseAddress = new Uri("https://ekawatch.pythonanywhere.com/")
+    var handler = new CredentialsHandler(new HttpClientHandler());
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri("https://ekawatch.pythonanywhere.com/")
+    };
 });
 
 builder.Services.AddScoped<AuthService>();

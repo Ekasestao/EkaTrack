@@ -57,14 +57,15 @@ public class ListsService
         return result ?? [];
     }
 
-    public async Task<ListItemModel> AddItemToListAsync(int listId, int tmdbId, string mediaType, string title, string? posterPath)
+    public async Task<ListItemModel> AddItemToListAsync(int listId, int tmdbId, string mediaType, string title, string? posterPath, double? voteAverage = null)
     {
         var response = await _http.PostAsJsonAsync($"/lists/{listId}/items", new
         {
             tmdb_id = tmdbId,
             media_type = mediaType,
             title,
-            poster_path = posterPath
+            poster_path = posterPath,
+            vote_average = voteAverage
         }, JsonOptions);
         if (response.IsSuccessStatusCode)
             return (await response.Content.ReadFromJsonAsync<ListItemModel>(JsonOptions))!;

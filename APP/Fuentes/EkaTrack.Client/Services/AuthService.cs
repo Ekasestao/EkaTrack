@@ -1,4 +1,5 @@
 using Microsoft.JSInterop;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 namespace EkaTrack.Client.Services
@@ -18,31 +19,45 @@ namespace EkaTrack.Client.Services
             _js = js;
         }
 
-        private void SetAuthHeader()
+        private void SetToken(string token)
         {
-            if (UserId.HasValue)
-            {
-                _http.DefaultRequestHeaders.Remove("X-User-Id");
-                _http.DefaultRequestHeaders.Add("X-User-Id", UserId.Value.ToString());
-            }
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        private void RemoveAuthHeader()
+        private void RemoveToken()
         {
-            _http.DefaultRequestHeaders.Remove("X-User-Id");
+            _http.DefaultRequestHeaders.Authorization = null;
         }
 
         public async Task InitAsync()
         {
-            var id = await _js.InvokeAsync<string>("localStorage.getItem", "user_id");
-            var username = await _js.InvokeAsync<string>("localStorage.getItem", "username");
-
-            if (!string.IsNullOrEmpty(id))
+            var stored = await _js.InvokeAsync<string>("localStorage.getItem", "token");
+            if (!string.IsNullOrEmpty(stored))
             {
-                UserId = int.Parse(id);
-                Username = username;
-                SetAuthHeader();
+                SetToken(stored);
             }
+
+            try
+            {
+                var response = await _http.GetFromJsonAsync<InitResponse>("/me");
+                if (response?.Status == 200 && response.User is not null)
+                {
+                    UserId = response.User.Id;
+                    Username = response.User.Username;
+                    if (!string.IsNullOrEmpty(response.Token))
+                    {
+                        SetToken(response.Token);
+                        await _js.InvokeVoidAsync("localStorage.setItem", "token", response.Token);
+                    }
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            RemoveToken();
+            await _js.InvokeVoidAsync("localStorage.removeItem", "token");
         }
 
         public async Task<(bool Success, string? Error)> LoginAsync(string credential, string password)
@@ -59,9 +74,11 @@ namespace EkaTrack.Client.Services
             {
                 UserId = result.User.Id;
                 Username = result.User.Username;
-                SetAuthHeader();
-                await _js.InvokeVoidAsync("localStorage.setItem", "user_id", result.User.Id.ToString());
-                await _js.InvokeVoidAsync("localStorage.setItem", "username", result.User.Username);
+                if (!string.IsNullOrEmpty(result.Token))
+                {
+                    SetToken(result.Token);
+                    await _js.InvokeVoidAsync("localStorage.setItem", "token", result.Token);
+                }
                 return (true, null);
             }
 
@@ -84,9 +101,11 @@ namespace EkaTrack.Client.Services
             {
                 UserId = result.User.Id;
                 Username = result.User.Username;
-                SetAuthHeader();
-                await _js.InvokeVoidAsync("localStorage.setItem", "user_id", result.User.Id.ToString());
-                await _js.InvokeVoidAsync("localStorage.setItem", "username", result.User.Username);
+                if (!string.IsNullOrEmpty(result.Token))
+                {
+                    SetToken(result.Token);
+                    await _js.InvokeVoidAsync("localStorage.setItem", "token", result.Token);
+                }
                 return true;
             }
 
@@ -98,9 +117,15 @@ namespace EkaTrack.Client.Services
             await _http.PostAsync("/logout", null);
             UserId = null;
             Username = null;
-            RemoveAuthHeader();
-            await _js.InvokeVoidAsync("localStorage.removeItem", "user_id");
-            await _js.InvokeVoidAsync("localStorage.removeItem", "username");
+            RemoveToken();
+            await _js.InvokeVoidAsync("localStorage.removeItem", "token");
+        }
+
+        private class InitResponse
+        {
+            public int Status { get; set; }
+            public UserData? User { get; set; }
+            public string? Token { get; set; }
         }
 
         private class AuthResponse
@@ -108,6 +133,7 @@ namespace EkaTrack.Client.Services
             public int Status { get; set; }
             public string? Message { get; set; }
             public UserData? User { get; set; }
+            public string? Token { get; set; }
         }
 
         private class UserData

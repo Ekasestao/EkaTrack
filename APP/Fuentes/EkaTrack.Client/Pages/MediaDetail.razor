@@ -369,24 +369,9 @@ else
                         @foreach (var rec in detail.Recommendations)
                         {
                             <div class="col-4 col-sm-3 col-md-2">
-                                <div style="cursor: pointer;" @onclick="() => GoToMedia(rec.MediaType, rec.Id)">
-                                    @if (!string.IsNullOrEmpty(rec.PosterPath))
-                                    {
-                                        <img src="https://image.tmdb.org/t/p/w185@(rec.PosterPath)"
-                                             alt="@rec.Title" class="w-100"
-                                             style="aspect-ratio: 2/3; object-fit: cover; border-radius: 6px;" />
-                                    }
-                                    else
-                                    {
-                                        <div style="aspect-ratio: 2/3; background: #2d2b4a; border-radius: 6px;"
-                                             class="d-flex align-items-center justify-content-center">
-                                            <span style="color: #666;">?</span>
-                                        </div>
-                                    }
-                                    <div style="font-size: 0.75rem; color: #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px;">
-                                        @rec.Title
-                                    </div>
-                                </div>
+                                <MediaCard Id="@rec.Id" MediaType="@rec.MediaType" Title="@rec.Title"
+                                           PosterPath="@rec.PosterPath" VoteAverage="@rec.VoteAverage"
+                                           PosterSize="w185" />
                             </div>
                         }
                     </div>
@@ -929,7 +914,7 @@ else
             else
             {
                 await ListsService.AddItemToListAsync(
-                    watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+                    watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
                 isWatched = true;
             }
         }
@@ -955,7 +940,7 @@ else
             else
             {
                 await ListsService.AddItemToListAsync(
-                    watchlistListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+                    watchlistListId.Value, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
                 isWatchlisted = true;
             }
         }
@@ -981,7 +966,7 @@ else
             else
             {
                 await ListsService.AddItemToListAsync(
-                    listId, detail.Id, Type, detail.Title, detail.PosterPath);
+                    listId, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
             }
             toggle();
         }
@@ -1005,7 +990,7 @@ else
             else
             {
                 var item = await ListsService.AddItemToListAsync(
-                    listId, detail.Id, Type, detail.Title, detail.PosterPath);
+                    listId, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
                 (listItemIds ??= [])[listId] = item.Id;
             }
 
@@ -1027,7 +1012,7 @@ else
         {
             var newList = await ListsService.CreateListAsync(newListName, null);
             var item = await ListsService.AddItemToListAsync(
-                newList.Id, detail.Id, Type, detail.Title, detail.PosterPath);
+                newList.Id, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
             allLists.Add(new ListInfo
             {
                 Id = newList.Id,
@@ -1078,30 +1063,38 @@ else
             if (batchEpisodes.Count == 0) return;
             await Tvmaze.ToggleEpisodeBatchAsync(batchEpisodes, newWatched);
             foreach (var ep in episodes) ep.Watched = newWatched;
-            if (!selectedSeason.HasValue && watchedListId.HasValue && detail is not null)
-            {
-                if (newWatched)
-                {
-                    await ListsService.AddItemToListAsync(
-                        watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
-                    isWatched = true;
-                }
-                else
-                {
-                    var items = await ListsService.GetListItemsAsync(watchedListId.Value);
-                    var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
-                    if (item is not null)
-                    {
-                        await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
-                        isWatched = false;
-                    }
-                }
-            }
             ComputeAllWatched();
+            await SyncWatchedListState();
             StateHasChanged();
         }
         catch { }
         finally { actionLoading = false; }
+    }
+
+    private async Task SyncWatchedListState()
+    {
+        if (watchedListId is null || detail is null || tvmazeData?.Seasons is null) return;
+        var seasonsWithEpisodes = tvmazeData.Seasons
+            .Where(s => s.Episodes is { Count: > 0 })
+            .ToList();
+        var allSeasonsWatched = seasonsWithEpisodes.Count > 0
+            && seasonsWithEpisodes.All(s => s.Episodes.All(e => e.Watched));
+        if (allSeasonsWatched && !isWatched)
+        {
+            await ListsService.AddItemToListAsync(
+                watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
+            isWatched = true;
+        }
+        else if (!allSeasonsWatched && isWatched)
+        {
+            var items = await ListsService.GetListItemsAsync(watchedListId.Value);
+            var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+            if (item is not null)
+            {
+                await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
+                isWatched = false;
+            }
+        }
     }
 
     private async Task ToggleEpisodeWatched(TvmazeEpisodeData ep)
@@ -1115,6 +1108,7 @@ else
             {
                 ep.Watched = !ep.Watched;
                 ComputeAllWatched();
+                await SyncWatchedListState();
                 StateHasChanged();
             }
         }
