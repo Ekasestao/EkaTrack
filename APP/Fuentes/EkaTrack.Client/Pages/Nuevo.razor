@@ -41,18 +41,61 @@
 
 @if (showFilters)
 {
-    <div style="box-sizing: border-box; overflow: hidden; height: 48px; background: #111924; display: flex; align-items: center; padding: 0 185px; width: 100vw; margin-left: calc(-50vw + 50%); gap: 12px; overflow-x: auto;">
-        @foreach (var opt in filterOptions)
-        {
-            <span style="color: #ddd; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-                  onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-                @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+    <div style="box-sizing: border-box; overflow: hidden; background: #111924; display: flex; flex-direction: column; width: 100vw; margin-left: calc(-50vw + 50%);">
+        <div style="height: 48px; display: flex; align-items: center; padding: 0 185px; gap: 12px; overflow-x: auto;">
+            @foreach (var opt in filterOptions)
+            {
+                var isActive = (opt == "Año de estreno" && _filterYear.HasValue)
+                            || (opt == "Calificación" && _filterMinRating.HasValue);
+                var isOpen = _openFilter == opt;
+                <span style="color: @(isActive ? "#cea235" : "#ddd"); font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px; background: @(isOpen ? "#2B333D" : "transparent");"
+                      onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='@(isOpen ? "#2B333D" : "transparent")'"
+                      @onclick="() => ToggleFilterOption(opt)">
+                    @opt <i class="fa-solid fa-angle-down" style="font-size: 10px;"></i>
+                </span>
+            }
+            <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
+                  onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'"
+                  @onclick="ResetFilters">
+                <i class="fa-solid fa-xmark"></i> Reinicializar
             </span>
+        </div>
+
+        @if (_openFilter == "Año de estreno")
+        {
+            var years = allItems.Select(i => i.Year).Where(y => y.Length == 4).Select(y => int.Parse(y)).Distinct().OrderByDescending(y => y).ToList();
+            <div style="padding: 8px 185px 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <span style="color: #ddd; font-size: 13px; cursor: pointer; padding: 4px 12px; border-radius: 100px; background: @(!_filterYear.HasValue ? "#cea235" : "#2B333D"); color: @(!_filterYear.HasValue ? "#000" : "#ddd");"
+                      @onclick='() => { _filterYear = null; _openFilter = null; }'>
+                    Todos
+                </span>
+                @foreach (var y in years)
+                {
+                    <span style="color: #ddd; font-size: 13px; cursor: pointer; padding: 4px 12px; border-radius: 100px; background: @(_filterYear == y ? "#cea235" : "#2B333D"); color: @(_filterYear == y ? "#000" : "#ddd");"
+                          @onclick='() => { _filterYear = y; _openFilter = null; }'>
+                        @y
+                    </span>
+                }
+            </div>
         }
-        <span style="color: #cea235; font-size: 13px; cursor: pointer; white-space: nowrap; padding: 4px 12px; border-radius: 100px; display: flex; align-items: center; gap: 6px;"
-              onmouseover="this.style.background='#2B333D'" onmouseout="this.style.background='transparent'">
-            <i class="fa-solid fa-xmark"></i> Reinicializar
-        </span>
+
+        @if (_openFilter == "Calificación")
+        {
+            <div style="padding: 8px 185px 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <span style="color: #ddd; font-size: 13px; cursor: pointer; padding: 4px 12px; border-radius: 100px; background: @(!_filterMinRating.HasValue ? "#cea235" : "#2B333D"); color: @(!_filterMinRating.HasValue ? "#000" : "#ddd");"
+                      @onclick='() => { _filterMinRating = null; _openFilter = null; }'>
+                    Todas
+                </span>
+                @foreach (var r in new[] { 10.0, 9.0, 8.0, 7.0, 6.0, 5.0 })
+                {
+                    <span style="color: #ddd; font-size: 13px; cursor: pointer; padding: 4px 12px; border-radius: 100px; background: @(_filterMinRating == r ? "#cea235" : "#2B333D"); color: @(_filterMinRating == r ? "#000" : "#ddd");"
+                          @onclick='() => { _filterMinRating = r; _openFilter = null; }'>
+                        @r
+                    </span>
+                }
+            </div>
+        }
+
     </div>
 }
 </div>
@@ -209,17 +252,28 @@ else
     private string activeTab = "estrenos";
     private bool showFilters;
     private string _sortOrder = "none";
+    private int? _filterYear;
+    private double? _filterMinRating;
+    private string? _openFilter;
     private readonly List<string> filterOptions =
     [
         "Año de estreno",
-        "Géneros",
-        "Precio",
-        "Calificación",
-        "País de producción",
-        "Duración",
-        "Clasificación por edades"
+        "Calificación"
     ];
     private List<TmdbMediaItem> allItems = [];
+
+    private List<TmdbMediaItem> filteredItems
+    {
+        get
+        {
+            var items = allItems;
+            if (_filterYear.HasValue)
+                items = items.Where(i => i.Year == _filterYear.Value.ToString()).ToList();
+            if (_filterMinRating.HasValue)
+                items = items.Where(i => i.VoteAverage >= _filterMinRating.Value).ToList();
+            return items;
+        }
+    }
     private HashSet<string> _likedKeys = [];
     private HashSet<string> _dislikedKeys = [];
     private HashSet<string> _watchedKeys = [];
@@ -230,9 +284,9 @@ else
         {
             var sorted = _sortOrder switch
             {
-                "asc" => allItems.OrderBy(i => i.Title).ToList(),
-                "desc" => allItems.OrderByDescending(i => i.Title).ToList(),
-                _ => allItems
+                "asc" => filteredItems.OrderBy(i => i.Title).ToList(),
+                "desc" => filteredItems.OrderByDescending(i => i.Title).ToList(),
+                _ => filteredItems
             };
             var groups = sorted
                 .Where(i => !string.IsNullOrEmpty(i.ReleaseDate))
@@ -287,6 +341,18 @@ else
     }
 
     private void ToggleFilters() => showFilters = !showFilters;
+
+    private void ToggleFilterOption(string opt)
+    {
+        _openFilter = _openFilter == opt ? null : opt;
+    }
+
+    private void ResetFilters()
+    {
+        _filterYear = null;
+        _filterMinRating = null;
+        _openFilter = null;
+    }
 
     private void HandleSortChanged(string order)
     {

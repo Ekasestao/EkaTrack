@@ -1078,30 +1078,38 @@ else
             if (batchEpisodes.Count == 0) return;
             await Tvmaze.ToggleEpisodeBatchAsync(batchEpisodes, newWatched);
             foreach (var ep in episodes) ep.Watched = newWatched;
-            if (!selectedSeason.HasValue && watchedListId.HasValue && detail is not null)
-            {
-                if (newWatched)
-                {
-                    await ListsService.AddItemToListAsync(
-                        watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
-                    isWatched = true;
-                }
-                else
-                {
-                    var items = await ListsService.GetListItemsAsync(watchedListId.Value);
-                    var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
-                    if (item is not null)
-                    {
-                        await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
-                        isWatched = false;
-                    }
-                }
-            }
             ComputeAllWatched();
+            await SyncWatchedListState();
             StateHasChanged();
         }
         catch { }
         finally { actionLoading = false; }
+    }
+
+    private async Task SyncWatchedListState()
+    {
+        if (watchedListId is null || detail is null || tvmazeData?.Seasons is null) return;
+        var seasonsWithEpisodes = tvmazeData.Seasons
+            .Where(s => s.Episodes is { Count: > 0 })
+            .ToList();
+        var allSeasonsWatched = seasonsWithEpisodes.Count > 0
+            && seasonsWithEpisodes.All(s => s.Episodes.All(e => e.Watched));
+        if (allSeasonsWatched && !isWatched)
+        {
+            await ListsService.AddItemToListAsync(
+                watchedListId.Value, detail.Id, Type, detail.Title, detail.PosterPath);
+            isWatched = true;
+        }
+        else if (!allSeasonsWatched && isWatched)
+        {
+            var items = await ListsService.GetListItemsAsync(watchedListId.Value);
+            var item = items.FirstOrDefault(i => i.TmdbId == detail.Id);
+            if (item is not null)
+            {
+                await ListsService.RemoveItemFromListAsync(watchedListId.Value, item.Id);
+                isWatched = false;
+            }
+        }
     }
 
     private async Task ToggleEpisodeWatched(TvmazeEpisodeData ep)
@@ -1115,6 +1123,7 @@ else
             {
                 ep.Watched = !ep.Watched;
                 ComputeAllWatched();
+                await SyncWatchedListState();
                 StateHasChanged();
             }
         }

@@ -9,6 +9,7 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <BlazorEnableDebugging>false</BlazorEnableDebugging>
     <DebugType>none</DebugType>
+    <WasmEnableIntegrityChecking>false</WasmEnableIntegrityChecking>
   </PropertyGroup>
 
   <ItemGroup>
