@@ -85,12 +85,12 @@
             @foreach (var lst in customLists)
             {
                 <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-                    <div style="position: relative; background: @(string.IsNullOrEmpty(lst.FirstItemPoster) ? "#0A121B" : "#1e1c33"); cursor: pointer; border-radius: 12px; overflow: hidden; height: 120px; display: flex; flex-direction: column; justify-content: center; padding: 12px 16px;"
+                    <div style="position: relative; background: @(string.IsNullOrEmpty(lst.FirstItemPoster) ? "#0A121B" : "#0A121B"); cursor: pointer; border-radius: 12px; overflow: hidden; height: 120px; display: flex; flex-direction: column; justify-content: center; padding: 12px 16px;"
                          @onclick="() => GoToCustomList(lst.Id)">
                         @if (!string.IsNullOrEmpty(lst.FirstItemPoster))
                         {
                             <div style="position: absolute; inset: 0; background-image: url('https://image.tmdb.org/t/p/w342@(lst.FirstItemPoster)'); background-size: cover; background-position: center; opacity: 0.25;"></div>
-                            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(30,28,51,1) 0%, rgba(30,28,51,0.3) 50%, rgba(30,28,51,0.1) 100%);"></div>
+                            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(6,13,23,1) 0%, rgba(6,13,23,0.3) 50%, rgba(6,13,23,0.1) 100%);"></div>
                         }
                         <div style="position: relative; z-index: 1;">
                             <div style="color: #fff; font-size: 14px; font-weight: 600;">@lst.Name</div>

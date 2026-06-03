@@ -150,13 +150,13 @@ else
                         <h5 style="color: #fff; font-size: 22px; padding-top: 32px; padding-bottom: 16px;">
                             @tvmazeData.Seasons.Count @(tvmazeData.Seasons.Count == 1 ? "TEMPORADA" : "TEMPORADAS")
                         </h5>
-                        <div class="d-flex flex-nowrap overflow-auto gap-2 pb-2" style="overflow-x: auto; scrollbar-width: thin;">
+                        <div class="d-flex flex-wrap gap-2 pb-2">
                             @foreach (var season in tvmazeData.Seasons.OrderBy(s => s.SeasonNumber))
                             {
                                 var watchedCount = season.Episodes.Count(e => e.Watched);
                                  <div @onclick="() => SelectSeason(season.SeasonNumber)"
-                                     style="flex: 0 0 auto; cursor: pointer; display: flex; align-items: center;
-                                            width: 165px; height: 72px;
+                                    style="flex-shrink: 0; cursor: pointer; display: flex; align-items: center;
+                                             width: 165px; height: 72px;
                                             background: @(selectedSeason == season.SeasonNumber ? "#1B283A" : "#111924");
                                             border: @(selectedSeason == season.SeasonNumber ? "1px solid #cea235" : "none");
                                             border-radius: 8px; overflow: hidden;
@@ -176,8 +176,8 @@ else
                                     }
                                     else
                                     {
-                                        <div style="width: 48px; height: 72px; background: #2d2b4a; flex-shrink: 0;
-                                                    display: flex; align-items: center; justify-content: center;">
+<div style="width: 48px; height: 72px; background: #2B333D; flex-shrink: 0;
+                                                     display: flex; align-items: center; justify-content: center;">
                                             <span style="color: #666; font-size: 1.2rem;">?</span>
                                         </div>
                                     }
@@ -249,8 +249,8 @@ else
                             @foreach (var p in detail.Providers.Flatrate)
                             {
                                 <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
-                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
-                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2B333D; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3a4552'" onmouseout="this.style.background='#2B333D'">
                                     @if (!string.IsNullOrEmpty(p.Logo))
                                     {
                                         <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
@@ -267,8 +267,8 @@ else
                             @foreach (var p in detail.Providers.Rent)
                             {
                                 <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
-                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
-                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2B333D; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3a4552'" onmouseout="this.style.background='#2B333D'">
                                     @if (!string.IsNullOrEmpty(p.Logo))
                                     {
                                         <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
@@ -285,8 +285,8 @@ else
                             @foreach (var p in detail.Providers.Buy)
                             {
                                 <a href="@GetProviderUrl(p.Name)" target="_blank" rel="noopener noreferrer"
-                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2d2b4a; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
-                                   onmouseover="this.style.background='#3d3b5e'" onmouseout="this.style.background='#2d2b4a'">
+                                   style="display: inline-flex; align-items: center; gap: 6px; background: #2B333D; padding: 4px 10px; border-radius: 20px; color: #ddd; font-size: 0.85rem; text-decoration: none; cursor: pointer;"
+                                   onmouseover="this.style.background='#3a4552'" onmouseout="this.style.background='#2B333D'">
                                     @if (!string.IsNullOrEmpty(p.Logo))
                                     {
                                         <img src="@GetLogoUrl(p.Logo)" alt="@p.Name" style="width: 20px; height: 20px; border-radius: 4px;" />
