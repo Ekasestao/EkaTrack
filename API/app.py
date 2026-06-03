@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from secretKey import secret_key, api_key, api_url, api_url_tvmaze, database
+from secretKey import secret_key, bearer_token, api_key, api_url, api_url_tvmaze, database
 from itsdangerous import URLSafeTimedSerializer
 import sqlite3
 import requests
@@ -46,6 +46,7 @@ def add_security_headers(response):
     return response
 
 TMDB_API_KEY = api_key
+TMDB_BEARER_TOKEN = bearer_token
 TMDB_BASE_URL = api_url
 TVMAZE_BASE_URL = api_url_tvmaze
 DATABASE = database
@@ -89,7 +90,8 @@ def init_db():
             username TEXT NOT NULL UNIQUE,
             email TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
-            tmdb_guest_session_id TEXT
+            tmdb_guest_session_id TEXT,
+            tmdb_guest_session_expires_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS watchlist (
@@ -127,6 +129,7 @@ def init_db():
             title TEXT NOT NULL,
             poster_path TEXT,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_interacted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE,
             UNIQUE(list_id, tmdb_id, media_type)
         );
@@ -155,6 +158,29 @@ def init_db():
     # Migration: add vote_average to list_items if not present
     try:
         conn.execute("ALTER TABLE list_items ADD COLUMN vote_average REAL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Migration: add tmdb_guest_session_id to users if not present
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN tmdb_guest_session_id TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Migration: add tmdb_guest_session_expires_at to users if not present
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN tmdb_guest_session_expires_at TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Migration: add last_interacted_at to list_items if not present
+    try:
+        conn.execute("ALTER TABLE list_items ADD COLUMN last_interacted_at TIMESTAMP")
+        conn.commit()
+        conn.execute("UPDATE list_items SET last_interacted_at = added_at WHERE last_interacted_at IS NULL")
         conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -1085,21 +1111,35 @@ def toggle_episode_batch():
 def get_or_create_guest_session(user_id):
     conn = get_db()
     row = conn.execute(
-        "SELECT tmdb_guest_session_id FROM users WHERE id = ?", (user_id,)
+        "SELECT tmdb_guest_session_id, tmdb_guest_session_expires_at FROM users WHERE id = ?",
+        (user_id,),
     ).fetchone()
-    if row and row["tmdb_guest_session_id"]:
-        conn.close()
-        return row["tmdb_guest_session_id"]
+    if row and row["tmdb_guest_session_id"] and row["tmdb_guest_session_expires_at"]:
+        try:
+            expires_str = row["tmdb_guest_session_expires_at"].replace(" UTC", "").strip()
+            expires = datetime.strptime(expires_str, "%Y-%m-%d %H:%M:%S")
+            if expires > datetime.utcnow():
+                conn.close()
+                return row["tmdb_guest_session_id"]
+        except (ValueError, TypeError):
+            pass
     try:
+        headers = {}
+        if TMDB_BEARER_TOKEN:
+            headers["Authorization"] = f"Bearer {TMDB_BEARER_TOKEN}"
         resp = requests.get(
             f"{TMDB_BASE_URL}/authentication/guest_session/new",
-            params={"api_key": TMDB_API_KEY},
+            params={"api_key": TMDB_API_KEY} if not TMDB_BEARER_TOKEN else {},
+            headers=headers,
+            timeout=15,
         )
         if resp.ok:
-            gs_id = resp.json()["guest_session_id"]
+            data = resp.json()
+            gs_id = data["guest_session_id"]
+            expires_at = data.get("expires_at", "")
             conn.execute(
-                "UPDATE users SET tmdb_guest_session_id = ? WHERE id = ?",
-                (gs_id, user_id),
+                "UPDATE users SET tmdb_guest_session_id = ?, tmdb_guest_session_expires_at = ? WHERE id = ?",
+                (gs_id, expires_at, user_id),
             )
             conn.commit()
             conn.close()
@@ -1129,16 +1169,26 @@ def tmdb_vote():
         return jsonify({"status": 500, "message": "No se pudo crear sesión TMDB"}), 500
 
     try:
+        headers = {}
+        if TMDB_BEARER_TOKEN:
+            headers["Authorization"] = f"Bearer {TMDB_BEARER_TOKEN}"
+        params = {"guest_session_id": gs_id}
+        if not TMDB_BEARER_TOKEN:
+            params["api_key"] = TMDB_API_KEY
         if value is not None:
             resp = requests.post(
                 f"{TMDB_BASE_URL}/{media_type}/{tmdb_id}/rating",
-                params={"api_key": TMDB_API_KEY, "guest_session_id": gs_id},
+                params=params,
+                headers=headers,
                 json={"value": value},
+                timeout=15,
             )
         else:
             resp = requests.delete(
                 f"{TMDB_BASE_URL}/{media_type}/{tmdb_id}/rating",
-                params={"api_key": TMDB_API_KEY, "guest_session_id": gs_id},
+                params=params,
+                headers=headers,
+                timeout=15,
             )
         return jsonify({"status": resp.status_code, "success": resp.ok})
     except requests.RequestException:
@@ -1280,12 +1330,12 @@ def handle_list_items(list_id):
         media_type = request.args.get("media_type")
         if media_type in ("movie", "tv"):
             items = conn.execute(
-                "SELECT * FROM list_items WHERE list_id = ? AND media_type = ? ORDER BY added_at DESC",
+                "SELECT * FROM list_items WHERE list_id = ? AND media_type = ? ORDER BY last_interacted_at DESC, added_at DESC",
                 (list_id, media_type),
             ).fetchall()
         else:
             items = conn.execute(
-                "SELECT * FROM list_items WHERE list_id = ? ORDER BY added_at DESC",
+                "SELECT * FROM list_items WHERE list_id = ? ORDER BY last_interacted_at DESC, added_at DESC",
                 (list_id,),
             ).fetchall()
         conn.close()
@@ -1346,6 +1396,35 @@ def handle_list_item(list_id, item_id):
     conn.commit()
     conn.close()
     return jsonify({"status": 200})
+
+
+@app.route("/items/interact", methods=["POST"])
+def interact_item():
+    user_id = get_user_id()
+    if user_id is None:
+        return jsonify({"status": 401, "message": "No autenticado"}), 401
+
+    data = request.json or {}
+    tmdb_id = data.get("tmdb_id")
+    media_type = data.get("media_type")
+
+    if not tmdb_id or not media_type:
+        return jsonify({"status": 400, "message": "Faltan campos"}), 400
+
+    conn = get_db()
+    try:
+        conn.execute(
+            """UPDATE list_items SET last_interacted_at = CURRENT_TIMESTAMP
+               WHERE list_id IN (SELECT id FROM lists WHERE user_id = ?)
+               AND tmdb_id = ? AND media_type = ?""",
+            (user_id, tmdb_id, media_type),
+        )
+        conn.commit()
+        return jsonify({"status": 200})
+    except Exception:
+        return jsonify({"status": 500, "message": "Error al actualizar"}), 500
+    finally:
+        conn.close()
 
 
 # ─── Watchlist (legacy) ─────────────────────────────────────────────────────

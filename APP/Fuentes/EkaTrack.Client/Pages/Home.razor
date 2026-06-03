@@ -498,6 +498,7 @@ else
     private async Task ToggleLikedItem(TmdbMediaItem item)
     {
         var key = $"{item.Id}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         try
         {
             var lists = await ListsService.GetListsAsync();
@@ -527,6 +528,7 @@ else
     private async Task ToggleDislikedItem(TmdbMediaItem item)
     {
         var key = $"{item.Id}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         try
         {
             if (_dislikedKeys.Contains(key))
@@ -558,6 +560,7 @@ else
 
     private async Task ToggleWatchedItem(TmdbMediaItem item)
     {
+        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         try
         {
             var lists = await ListsService.GetListsAsync();
@@ -596,6 +599,7 @@ else
 
     private async Task OpenListSelector(TmdbMediaItem item)
     {
+        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         _listSelectorItem = item;
         showCustomModal = true;
         await LoadLists();

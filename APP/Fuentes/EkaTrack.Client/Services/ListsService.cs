@@ -83,4 +83,9 @@ public class ListsService
         var response = await _http.DeleteAsync($"/lists/{listId}/items/{itemId}");
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task InteractItemAsync(int tmdbId, string mediaType)
+    {
+        await _http.PostAsJsonAsync("/items/interact", new { tmdb_id = tmdbId, media_type = mediaType }, JsonOptions);
+    }
 }

@@ -841,6 +841,7 @@ else
     private async Task ToggleLiked()
     {
         if (!likedListId.HasValue || detail is null) return;
+        await ListsService.InteractItemAsync(detail.Id, Type);
         actionLoading = true;
         try
         {
@@ -871,6 +872,7 @@ else
     private async Task ToggleDisliked()
     {
         if (detail is null) return;
+        await ListsService.InteractItemAsync(detail.Id, Type);
         actionLoading = true;
         try
         {
@@ -900,6 +902,7 @@ else
     private async Task ToggleWatched()
     {
         if (!watchedListId.HasValue || detail is null) return;
+        await ListsService.InteractItemAsync(detail.Id, Type);
         actionLoading = true;
         try
         {
@@ -926,6 +929,7 @@ else
     private async Task ToggleWatchlist()
     {
         if (!watchlistListId.HasValue || detail is null) return;
+        await ListsService.InteractItemAsync(detail.Id, Type);
         actionLoading = true;
         try
         {
@@ -1046,6 +1050,7 @@ else
     private async Task ToggleAllWatched()
     {
         if (!AuthService.IsLoggedIn || tvmazeData is null || tvmazeData.TvmazeId is null) return;
+        if (detail is not null) await ListsService.InteractItemAsync(detail.Id, Type);
         actionLoading = true;
         try
         {
@@ -1100,6 +1105,7 @@ else
     private async Task ToggleEpisodeWatched(TvmazeEpisodeData ep)
     {
         if (!AuthService.IsLoggedIn || detail is null || tvmazeData?.TvmazeId is null) return;
+        await ListsService.InteractItemAsync(detail.Id, Type);
         try
         {
             var success = await Tvmaze.ToggleEpisodeWatchedAsync(

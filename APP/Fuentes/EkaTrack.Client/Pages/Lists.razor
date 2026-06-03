@@ -825,6 +825,7 @@
         var likedListId = allLists.FirstOrDefault(l => l.ListType == "liked")?.Id;
         if (!likedListId.HasValue) return;
         var key = $"{item.TmdbId}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.TmdbId, item.MediaType);
         try
         {
             if (_likedKeys.Contains(key))
@@ -853,6 +854,7 @@
     private async Task ToggleDislikedItem(ListItemModel item)
     {
         var key = $"{item.TmdbId}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.TmdbId, item.MediaType);
         try
         {
             if (_dislikedKeys.Contains(key))
@@ -888,6 +890,7 @@
         var watchedListId = allLists.FirstOrDefault(l => l.ListType == "watched")?.Id;
         if (!watchedListId.HasValue) return;
         var key = $"{item.TmdbId}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.TmdbId, item.MediaType);
         try
         {
             if (_watchedKeys.Contains(key))
@@ -922,6 +925,8 @@
 
     private async Task OpenListSelector(ListItemModel item)
     {
+        var key = $"{item.TmdbId}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.TmdbId, item.MediaType);
         _listSelectorItem = item;
         showCustomModal = true;
         await LoadLists();
@@ -1198,6 +1203,7 @@
         var listId = selectedListId;
         if (listId == null) return;
         var key = $"{item.Id}:{item.MediaType}";
+        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         if (addTitlesInList.Contains(key))
         {
             if (addTitlesItemIds.TryGetValue(key, out var listItemId))
