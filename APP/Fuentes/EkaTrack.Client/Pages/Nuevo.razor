@@ -1,5 +1,6 @@
 @page "/nuevo"
 @rendermode InteractiveWebAssembly
+@implements IAsyncDisposable
 @using EkaTrack.Client.Models
 @inject TmdbService Tmdb
 @inject NavigationManager Nav
@@ -106,7 +107,7 @@
         <div class="spinner-border text-warning" role="status"></div>
     </div>
 }
-else if (groupedItems.Count == 0)
+else if (visibleGroupedItems.Count == 0)
 {
     <div class="text-center py-5" style="color: #888;">
         <p>No hay resultados.</p>
@@ -114,7 +115,7 @@ else if (groupedItems.Count == 0)
 }
 else
 {
-    @foreach (var group in groupedItems)
+    @foreach (var group in visibleGroupedItems)
     {
         <div class="mb-4">
             <h5 style="color: #cea235; border-bottom: 1px solid #2d2b4a; padding-bottom: 8px;">
@@ -139,6 +140,18 @@ else
             </div>
         </div>
     }
+
+    @* Sentinel for infinite scroll *@
+    <div id="scroll-sentinel" class="text-center py-4">
+        @if (loadingMore)
+        {
+            <div class="spinner-border text-warning" role="status"></div>
+        }
+        else if (allPagesLoaded)
+        {
+            <small style="color: #666;">— Todos los resultados cargados —</small>
+        }
+    </div>
 }
 
 @if (showCustomModal && _listSelectorItem is not null)
@@ -261,6 +274,13 @@ else
         "Calificación"
     ];
     private List<TmdbMediaItem> allItems = [];
+    private const int BatchSize = 20;
+    private bool loadingMore;
+    private bool allPagesLoaded;
+    private int currentPage;
+    private int totalPages = 1;
+    private int displayedCount;
+    private object? scrollInstance;
 
     private List<TmdbMediaItem> filteredItems
     {
@@ -278,7 +298,7 @@ else
     private HashSet<string> _dislikedKeys = [];
     private HashSet<string> _watchedKeys = [];
     private HashSet<string> _inAnyListKeys = [];
-    private List<IGrouping<string, TmdbMediaItem>> groupedItems
+    private List<IGrouping<string, TmdbMediaItem>> visibleGroupedItems
     {
         get
         {
@@ -286,9 +306,12 @@ else
             {
                 "asc" => filteredItems.OrderBy(i => i.Title).ToList(),
                 "desc" => filteredItems.OrderByDescending(i => i.Title).ToList(),
-                _ => filteredItems
+                _ => activeTab == "proximamente"
+                    ? filteredItems.OrderBy(i => i.ReleaseDate).ToList()
+                    : filteredItems.OrderByDescending(i => i.ReleaseDate).ToList()
             };
-            var groups = sorted
+            var limited = sorted.Take(displayedCount).ToList();
+            var groups = limited
                 .Where(i => !string.IsNullOrEmpty(i.ReleaseDate))
                 .GroupBy(i => i.ReleaseDate!)
                 .ToList();
@@ -309,6 +332,19 @@ else
     {
         activeTab = tab;
         loading = true;
+        allItems = [];
+        displayedCount = 0;
+        allPagesLoaded = false;
+        if (scrollInstance is not null)
+        {
+            try
+            {
+                var module = await JS.InvokeAsync<IJSObjectReference>("import", "./scroll-loader.js");
+                await module.InvokeVoidAsync("destroyScrollLoader", scrollInstance);
+            }
+            catch { }
+            scrollInstance = null;
+        }
         await LoadTab(tab);
         loading = false;
     }
@@ -317,14 +353,77 @@ else
     {
         try
         {
+            currentPage = 0;
             var result = tab == "estrenos"
-                ? await Tmdb.GetNowPlayingAsync()
-                : await Tmdb.GetUpcomingAsync();
+                ? await Tmdb.GetNowPlayingAsync(1)
+                : await Tmdb.GetUpcomingAsync(1);
+            currentPage = result.Page;
+            totalPages = result.TotalPages;
             allItems = result.Results;
+            displayedCount = BatchSize;
+            allPagesLoaded = currentPage >= totalPages;
         }
         catch
         {
             allItems = [];
+        }
+    }
+
+    private async Task LoadPage(int page)
+    {
+        try
+        {
+            var result = activeTab == "estrenos"
+                ? await Tmdb.GetNowPlayingAsync(page)
+                : await Tmdb.GetUpcomingAsync(page);
+            currentPage = result.Page;
+            totalPages = result.TotalPages;
+            allItems.AddRange(result.Results);
+            allPagesLoaded = currentPage >= totalPages;
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task LoadNextPage()
+    {
+        if (loadingMore || allPagesLoaded) return;
+
+        displayedCount += BatchSize;
+
+        if (displayedCount > filteredItems.Count)
+        {
+            loadingMore = true;
+            StateHasChanged();
+            await LoadPage(currentPage + 1);
+            loadingMore = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private bool sentinelReady => !loading && allItems.Count > 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (sentinelReady && scrollInstance is null)
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./scroll-loader.js");
+            var dotnetRef = DotNetObjectReference.Create(this);
+            scrollInstance = await module.InvokeAsync<object>("initScrollLoader", "scroll-sentinel", dotnetRef);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (scrollInstance is not null)
+        {
+            try
+            {
+                var module = await JS.InvokeAsync<IJSObjectReference>("import", "./scroll-loader.js");
+                await module.InvokeVoidAsync("destroyScrollLoader", scrollInstance);
+            }
+            catch { }
         }
     }
 

@@ -1,7 +1,14 @@
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from secretKey import secret_key, bearer_token, api_key, api_url, api_url_tvmaze, database
+from secretKey import (
+    secret_key,
+    bearer_token,
+    api_key,
+    api_url,
+    api_url_tvmaze,
+    database,
+)
 from itsdangerous import URLSafeTimedSerializer
 import sqlite3
 import requests
@@ -11,7 +18,7 @@ from datetime import datetime
 import re
 
 token_serializer = URLSafeTimedSerializer(secret_key, salt="auth")
-TOKEN_MAX_AGE = 2592000  # 30 días
+TOKEN_MAX_AGE = 2592000
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = secret_key
@@ -44,6 +51,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
+
 
 TMDB_API_KEY = api_key
 TMDB_BEARER_TOKEN = bearer_token
@@ -148,44 +156,40 @@ def init_db():
     """)
     conn.commit()
 
-    # Migration: add tvmaze_show_id to list_items if not present
     try:
         conn.execute("ALTER TABLE list_items ADD COLUMN tvmaze_show_id INTEGER")
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Migration: add vote_average to list_items if not present
     try:
         conn.execute("ALTER TABLE list_items ADD COLUMN vote_average REAL")
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Migration: add tmdb_guest_session_id to users if not present
     try:
         conn.execute("ALTER TABLE users ADD COLUMN tmdb_guest_session_id TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Migration: add tmdb_guest_session_expires_at to users if not present
     try:
         conn.execute("ALTER TABLE users ADD COLUMN tmdb_guest_session_expires_at TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Migration: add last_interacted_at to list_items if not present
     try:
         conn.execute("ALTER TABLE list_items ADD COLUMN last_interacted_at TIMESTAMP")
         conn.commit()
-        conn.execute("UPDATE list_items SET last_interacted_at = added_at WHERE last_interacted_at IS NULL")
+        conn.execute(
+            "UPDATE list_items SET last_interacted_at = added_at WHERE last_interacted_at IS NULL"
+        )
         conn.commit()
     except sqlite3.OperationalError:
         pass
 
-    # Backfill vote_average for existing items via TMDB
     missing = conn.execute(
         "SELECT id, tmdb_id, media_type, title FROM list_items WHERE vote_average IS NULL OR vote_average <= 0"
     ).fetchall()
@@ -336,7 +340,10 @@ def login():
 
     if not credential or not password:
         _record_attempt(ip, False)
-        return jsonify({"status": 400, "message": "Credencial y contraseña requeridos"}), 400
+        return (
+            jsonify({"status": 400, "message": "Credencial y contraseña requeridos"}),
+            400,
+        )
 
     conn = get_db()
     user = conn.execute(
@@ -359,7 +366,9 @@ def login():
 
     ensure_default_lists(user["id"])
 
-    token = token_serializer.dumps({"user_id": user["id"], "username": user["username"]})
+    token = token_serializer.dumps(
+        {"user_id": user["id"], "username": user["username"]}
+    )
 
     return jsonify(
         {
@@ -391,7 +400,9 @@ def me():
     username = session.get("username")
     if username is None:
         conn = get_db()
-        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        row = conn.execute(
+            "SELECT username FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
         conn.close()
         username = row["username"] if row else None
 
@@ -452,8 +463,14 @@ def nuevo_estrenos():
             "page": page,
         },
     )
+    today = datetime.now().strftime("%Y-%m-%d")
+    results = []
     for item in data.get("results", []):
         item["media_type"] = "movie"
+        rd = item.get("release_date")
+        if not rd or rd <= today:
+            results.append(item)
+    data["results"] = results
     return jsonify(data)
 
 
@@ -500,7 +517,6 @@ def media_detail(media_type, tmdb_id):
         },
     )
 
-    # ─── TMDB duplicate fallback: TVmaze chain ───────────────────────────
     def _tvm_status(s):
         return {
             "Running": "Returning Series",
@@ -537,7 +553,6 @@ def media_detail(media_type, tmdb_id):
             )
         )
 
-        # Add TMDB alternative titles (often Latin script for non-Latin entries)
         try:
             alt_data = tmdb_get_json(
                 f"{TMDB_BASE_URL}/{media_type}/{tmdb_id}/alternative_titles",
@@ -550,7 +565,6 @@ def media_detail(media_type, tmdb_id):
         except requests.RequestException:
             pass
 
-        # Search TVmaze by each term
         tvmaze_show = None
         tvmaze_headers = {"Accept-Language": "es"}
         for term in search_terms:
@@ -600,7 +614,6 @@ def media_detail(media_type, tmdb_id):
 
     certification = None
     if media_type == "movie":
-        # Prefer theatrical (type 3) → limited (2) → digital (4) → physical (5) → TV (6) → premiere (1)
         type_priority = {3: 0, 2: 1, 4: 2, 5: 3, 6: 4, 1: 5}
         es_dates = []
         for country in data.get("release_dates", {}).get("results", []):
@@ -629,7 +642,6 @@ def media_detail(media_type, tmdb_id):
 
     data["certification"] = certification
 
-    # ─── Videos (trailer) — llamada aparte sin idioma para obtener más resultados ──
     trailer = None
     try:
         vid_data = tmdb_get_json(
@@ -644,7 +656,6 @@ def media_detail(media_type, tmdb_id):
         pass
     data["trailer"] = trailer
 
-    # ─── Watch providers (ES) ───────────────────────────────────────────────
     providers = None
     wp = data.get("watch/providers", {}).get("results", {})
     es_providers = wp.get("ES")
@@ -664,7 +675,6 @@ def media_detail(media_type, tmdb_id):
     data.pop("watch/providers", None)
     data["providers"] = providers
 
-    # ─── Recommendations ────────────────────────────────────────────────────
     recs = []
     for r in data.get("recommendations", {}).get("results", [])[:12]:
         recs.append(
@@ -679,7 +689,6 @@ def media_detail(media_type, tmdb_id):
     data.pop("recommendations", None)
     data["recommendations"] = recs
 
-    # ─── TV: filtrar especiales ──────────────────────────────────────────
     if media_type == "tv":
         if "seasons" in data:
             data["seasons"] = [
@@ -697,7 +706,6 @@ def media_detail(media_type, tmdb_id):
 def tvmaze_show(tmdb_id):
     user_id = get_user_id()
 
-    # 1. Get IMDb ID from TMDB external_ids
     imdb_id = None
     try:
         ext_data = tmdb_get_json(
@@ -708,7 +716,6 @@ def tvmaze_show(tmdb_id):
     except requests.RequestException:
         pass
 
-    # 2. Lookup TVmaze show by IMDb ID, fallback by name
     tvmaze_show = None
     tvmaze_headers = {"Accept-Language": "es"}
     if imdb_id:
@@ -737,7 +744,6 @@ def tvmaze_show(tmdb_id):
                 else None
             )
             if name:
-                # Try searching with name fragments (e.g., after ":")
                 search_names = [name]
                 for sep in [":", " - ", " — ", " – ", "—", "–"]:
                     parts = name.split(sep)
@@ -747,7 +753,6 @@ def tvmaze_show(tmdb_id):
                             if stripped and stripped not in search_names:
                                 search_names.append(stripped)
 
-                # Also try with year for specificity
                 if year:
                     for sn in list(search_names):
                         with_year = f"{sn} {year}"
@@ -768,7 +773,6 @@ def tvmaze_show(tmdb_id):
                     except requests.RequestException:
                         continue
 
-                # 3. Fallback: TVmaze /search/shows (plural, returns multiple results)
                 if not tvmaze_show:
                     try:
                         search_resp = requests.get(
@@ -778,15 +782,11 @@ def tvmaze_show(tmdb_id):
                             timeout=10,
                         )
                         if search_resp.ok:
-                            results = (
-                                search_resp.json()
-                            )  # list of {"score": ..., "show": {...}}
+                            results = search_resp.json()
                             for result in results:
                                 show = result.get("show", {})
                                 if year:
-                                    premiered = show.get(
-                                        "premiered", ""
-                                    )  # "YYYY-MM-DD"
+                                    premiered = show.get("premiered", "")
                                     show_year = premiered[:4] if premiered else None
                                     if show_year and show_year != year:
                                         continue
@@ -802,7 +802,6 @@ def tvmaze_show(tmdb_id):
 
     tvmaze_id = tvmaze_show["id"]
 
-    # 3. Fetch seasons from TVmaze
     try:
         seasons_resp = requests.get(
             f"{TVMAZE_BASE_URL}/shows/{tvmaze_id}/seasons", headers=tvmaze_headers
@@ -813,7 +812,6 @@ def tvmaze_show(tmdb_id):
     except requests.RequestException:
         return jsonify({"tvmaze_id": tvmaze_id, "seasons": []})
 
-    # 4. Get watched episodes for this user from local DB
     conn = get_db()
     watched_episodes = set()
     if user_id:
@@ -824,9 +822,8 @@ def tvmaze_show(tmdb_id):
         watched_episodes = {r["tvmaze_episode_id"] for r in rows}
     conn.close()
 
-    # 5. Fetch Spanish episode names + ratings from TMDB (by airdate + by season/ep)
-    tmdb_by_date = {}  # airdate -> {ep_num: {"name": ..., "vote_average": ...}}
-    tmdb_by_season = {}  # season_num -> {ep_num: ...}
+    tmdb_by_date = {}
+    tmdb_by_season = {}
     try:
         max_tmdb_seasons = (
             max((s.get("number", 0) for s in seasons_data), default=0) + 5
@@ -869,13 +866,12 @@ def tvmaze_show(tmdb_id):
                     return next(iter(by_ep.values()))
         return None
 
-    # 6. Fetch episodes for each season from TVmaze
     result_seasons = []
     for season in seasons_data:
         season_id = season["id"]
         season_number = season.get("number", 0)
         if season_number == 0:
-            continue  # skip specials
+            continue
 
         episodes = []
         try:
@@ -887,7 +883,7 @@ def tvmaze_show(tmdb_id):
                 for ep in ep_resp.json():
                     ep_num = ep.get("number")
                     if ep_num is None:
-                        continue  # skip specials/OVAs/un-aired dentro de la temporada
+                        continue
                     ep_season = ep.get("season", season_number)
                     tmdb_info = tmdb_ep_info(ep_season, ep_num, ep.get("airdate"))
                     episodes.append(
@@ -1116,7 +1112,9 @@ def get_or_create_guest_session(user_id):
     ).fetchone()
     if row and row["tmdb_guest_session_id"] and row["tmdb_guest_session_expires_at"]:
         try:
-            expires_str = row["tmdb_guest_session_expires_at"].replace(" UTC", "").strip()
+            expires_str = (
+                row["tmdb_guest_session_expires_at"].replace(" UTC", "").strip()
+            )
             expires = datetime.strptime(expires_str, "%Y-%m-%d %H:%M:%S")
             if expires > datetime.utcnow():
                 conn.close()
@@ -1280,7 +1278,11 @@ def handle_list(list_id):
     if request.method == "PATCH":
         data = request.json
         name = data["name"].strip() if data.get("name") else row["name"]
-        description = data.get("description", "").strip() if "description" in data else row["description"]
+        description = (
+            data.get("description", "").strip()
+            if "description" in data
+            else row["description"]
+        )
 
         conn.execute(
             "UPDATE lists SET name = ?, description = ? WHERE id = ?",
