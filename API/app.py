@@ -14,7 +14,7 @@ import sqlite3
 import requests
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 token_serializer = URLSafeTimedSerializer(secret_key, salt="auth")
@@ -58,6 +58,7 @@ TMDB_BEARER_TOKEN = bearer_token
 TMDB_BASE_URL = api_url
 TVMAZE_BASE_URL = api_url_tvmaze
 DATABASE = database
+NUEVO_MAX_PAGES = 20
 
 # ─── TMDB Cache (5 min TTL) ────────────────────────────────────────────────
 _tmdb_cache = {}
@@ -453,48 +454,91 @@ def search():
 
 @app.route("/nuevo/estrenos")
 def nuevo_estrenos():
-    page = request.args.get("page", 1)
-    data = tmdb_get_json(
-        f"{TMDB_BASE_URL}/movie/now_playing",
-        {
-            "api_key": TMDB_API_KEY,
-            "language": "es-ES",
-            "region": "ES",
-            "page": page,
-        },
-    )
     today = datetime.now().strftime("%Y-%m-%d")
-    results = []
-    for item in data.get("results", []):
-        item["media_type"] = "movie"
-        rd = item.get("release_date")
-        if not rd or rd <= today:
-            results.append(item)
-    data["results"] = results
-    return jsonify(data)
+    cutoff = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+
+    all_results = []
+    seen_ids = set()
+
+    for page in range(1, NUEVO_MAX_PAGES + 1):
+        data = tmdb_get_json(
+            f"{TMDB_BASE_URL}/movie/now_playing",
+            {
+                "api_key": TMDB_API_KEY,
+                "language": "es-ES",
+                "region": "ES",
+                "page": page,
+            },
+        )
+        results = data.get("results", [])
+        if not results:
+            break
+
+        for item in results:
+            item["media_type"] = "movie"
+            item_id = item.get("id")
+            if item_id in seen_ids:
+                continue
+            rd = item.get("release_date", "")
+            if not rd or (cutoff <= rd <= today):
+                seen_ids.add(item_id)
+                all_results.append(item)
+
+        if page >= data.get("total_pages", 1):
+            break
+
+    return jsonify({
+        "results": all_results,
+        "page": 1,
+        "total_pages": 1,
+        "total_results": len(all_results),
+    })
+
 
 
 @app.route("/nuevo/proximamente")
 def nuevo_proximamente():
-    page = request.args.get("page", 1)
-    data = tmdb_get_json(
-        f"{TMDB_BASE_URL}/movie/upcoming",
-        {
-            "api_key": TMDB_API_KEY,
-            "language": "es-ES",
-            "region": "ES",
-            "page": page,
-        },
-    )
     today = datetime.now().strftime("%Y-%m-%d")
-    results = []
-    for item in data.get("results", []):
-        item["media_type"] = "movie"
-        rd = item.get("release_date")
-        if rd and rd >= today:
-            results.append(item)
-    data["results"] = results
-    return jsonify(data)
+    cutoff = (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d")
+    start = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    all_results = []
+    seen_ids = set()
+
+    for page in range(1, NUEVO_MAX_PAGES + 1):
+        data = tmdb_get_json(
+            f"{TMDB_BASE_URL}/discover/movie",
+            {
+                "api_key": TMDB_API_KEY,
+                "language": "es-ES",
+                "region": "ES",
+                "primary_release_date.gte": start,
+                "primary_release_date.lte": cutoff,
+                "sort_by": "popularity.desc",
+                "page": page,
+            },
+        )
+        results = data.get("results", [])
+        if not results:
+            break
+
+        for item in results:
+            item["media_type"] = "movie"
+            item_id = item.get("id")
+            if item_id in seen_ids:
+                continue
+            seen_ids.add(item_id)
+            all_results.append(item)
+
+        if page >= data.get("total_pages", 1):
+            break
+
+    return jsonify({
+        "results": all_results,
+        "page": 1,
+        "total_pages": 1,
+        "total_results": len(all_results),
+    })
 
 
 @app.route("/media/<string:media_type>/<int:tmdb_id>")
