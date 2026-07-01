@@ -511,7 +511,6 @@ def nuevo_proximamente():
             {
                 "api_key": TMDB_API_KEY,
                 "language": "es-ES",
-                "region": "ES",
                 "primary_release_date.gte": start,
                 "primary_release_date.lte": cutoff,
                 "sort_by": "popularity.desc",
