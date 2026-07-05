@@ -1,0 +1,104 @@
+@page "/logs"
+@rendermode InteractiveWebAssembly
+@using System.Text.Json
+@using EkaTrack.Client.Models
+@inject TvmazeService Tvmaze
+@inject AuthService AuthService
+@inject NavigationManager Nav
+
+@if (!AuthService.IsLoggedIn)
+{
+    <div class="text-center py-5">
+        <p>Inicia sesión para ver los logs</p>
+    </div>
+    return;
+}
+
+@if (loading)
+{
+    <div style="min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center;">
+        <div class="spinner-border text-warning" role="status"></div>
+    </div>
+}
+else if (entries.Count == 0)
+{
+    <div class="text-center py-5" style="color: #888;">
+        <p>Aún no hay registros de tracking.</p>
+    </div>
+}
+else
+{
+    <div style="max-width: 800px; margin: 0 auto; padding: 1rem;">
+        <h4 style="margin-bottom: 1rem;">Historial de tracking</h4>
+        @foreach (var entry in entries)
+        {
+            <div style="background: #1e1c33; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem;
+                        display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+                <div>
+                    <div style="font-weight: 600; color: #fff; margin-bottom: 0.25rem;">
+                        @switch (entry.Action)
+                        {
+                            case "batch_toggle":
+                                <span>Batch — @GetDetailValue(entry.Details, "show_title")</span>
+                                break;
+                            case "episode_toggle":
+                                <span>Episodio @GetDetailValue(entry.Details, "tvmaze_episode_id")</span>
+                                break;
+                            default:
+                                <span>@entry.Action</span>
+                                break;
+                        }
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85rem;">
+                        @if (entry.Details.HasValue)
+                        {
+                            var details = entry.Details.Value;
+                            if (details.TryGetProperty("episode_count", out var count))
+                            {
+                                <span>@count.GetInt32() episodios · </span>
+                            }
+                            if (details.TryGetProperty("watched", out var watched))
+                            {
+                                <span style="color: @(watched.GetBoolean() ? "#00cc00" : "#ff4444")">
+                                    @(watched.GetBoolean() ? "Visto" : "No visto")
+                                </span>
+                            }
+                        }
+                    </div>
+                </div>
+                <div style="color: #888; font-size: 0.8rem; white-space: nowrap;">
+                    @entry.CreatedAt
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private List<TrackingLogEntry> entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            entries = await Tvmaze.GetTrackingLogAsync(50);
+        }
+        catch
+        {
+            entries = [];
+        }
+        loading = false;
+    }
+
+    private string GetDetailValue(JsonElement? details, string key)
+    {
+        if (!details.HasValue) return "";
+        if (details.Value.TryGetProperty(key, out var prop))
+        {
+            if (prop.ValueKind == JsonValueKind.String) return prop.GetString() ?? "";
+            return prop.ToString();
+        }
+        return "";
+    }
+}

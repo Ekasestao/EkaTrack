@@ -154,6 +154,15 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             UNIQUE(user_id, tvmaze_episode_id)
         );
+
+        CREATE TABLE IF NOT EXISTS action_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
     """)
     conn.commit()
 
@@ -1061,6 +1070,19 @@ def _tvmaze_fallback(tmdb_id):
         return jsonify({"tvmaze_id": 0, "seasons": []})
 
 
+def _log_action(user_id, action, details=None):
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO action_log (user_id, action, details) VALUES (?, ?, ?)",
+            (user_id, action, json.dumps(details) if details else None),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 @app.route("/tracking/episode/<int:tvmaze_episode_id>/toggle", methods=["POST"])
 def toggle_episode_watched(tvmaze_episode_id):
     user_id = get_user_id()
@@ -1083,6 +1105,11 @@ def toggle_episode_watched(tvmaze_episode_id):
         )
         conn.commit()
         conn.close()
+        _log_action(user_id, "episode_toggle", {
+            "tvmaze_episode_id": tvmaze_episode_id,
+            "watched": bool(new_watched),
+            "method": "update",
+        })
         return jsonify({"status": 200, "watched": bool(new_watched)})
     else:
         conn.execute(
@@ -1098,6 +1125,11 @@ def toggle_episode_watched(tvmaze_episode_id):
         )
         conn.commit()
         conn.close()
+        _log_action(user_id, "episode_toggle", {
+            "tvmaze_episode_id": tvmaze_episode_id,
+            "watched": True,
+            "method": "insert",
+        })
         return jsonify({"status": 200, "watched": True})
 
 
@@ -1141,7 +1173,38 @@ def toggle_episode_batch():
                 )
     conn.commit()
     conn.close()
+    _log_action(user_id, "batch_toggle", {
+        "episode_count": len(episodes),
+        "watched": watched,
+        "show_title": episodes[0].get("show_title", "") if episodes else None,
+    })
     return jsonify({"status": 200})
+
+
+@app.route("/tracking/log", methods=["GET"])
+def get_tracking_log():
+    user_id = get_user_id()
+    if user_id is None:
+        return jsonify({"status": 401, "message": "No autenticado"}), 401
+
+    limit = request.args.get("limit", 20, type=int)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, action, details, created_at FROM action_log WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+        (user_id, limit),
+    ).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        entry = {"id": r["id"], "action": r["action"], "created_at": r["created_at"]}
+        if r["details"]:
+            try:
+                entry["details"] = json.loads(r["details"])
+            except (json.JSONDecodeError, TypeError):
+                entry["details"] = r["details"]
+        result.append(entry)
+    return jsonify(result)
 
 
 # ─── TMDB Vote ────────────────────────────────────────────────────────────────

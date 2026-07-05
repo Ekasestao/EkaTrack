@@ -62,6 +62,7 @@ public class TvmazeService
         var allEps = tvmazeData.Seasons
             .Where(s => s.Episodes is { Count: > 0 })
             .SelectMany(s => s.Episodes)
+            .Where(ep => !watched || HasAired(ep.AirDate))
             .ToList();
         if (allEps.Count == 0) return;
         var batch = allEps.Select(ep => (
@@ -71,5 +72,27 @@ public class TvmazeService
             showTitle
         )).ToList();
         await ToggleEpisodeBatchAsync(batch, watched);
+    }
+
+    public async Task<List<TrackingLogEntry>> GetTrackingLogAsync(int limit = 50)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"/tracking/log?limit={limit}");
+            if (!response.IsSuccessStatusCode) return [];
+            return await response.Content.ReadFromJsonAsync<List<TrackingLogEntry>>(JsonOptions) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static bool HasAired(string? airDate)
+    {
+        if (string.IsNullOrEmpty(airDate)) return true;
+        if (DateOnly.TryParse(airDate, out var date))
+            return date <= DateOnly.FromDateTime(DateTime.UtcNow);
+        return true;
     }
 }

@@ -224,6 +224,153 @@ public class TvmazeServiceTests
     }
 
     [Fact]
+    public async Task ToggleAllTvEpisodesAsync_FiltersFutureEpisodesWhenWatched()
+    {
+        var seasonsData = new
+        {
+            tvmaze_id = 14459,
+            seasons = new[]
+            {
+                new
+                {
+                    tvmaze_season_id = 38865,
+                    season_number = 1,
+                    name = "Season 1",
+                    episode_count = 2,
+                    poster_url = (string?)null,
+                    episodes = new[]
+                    {
+                        new
+                        {
+                            tvmaze_episode_id = 1001,
+                            season_number = 1,
+                            episode_number = 1,
+                            name = "Ep1",
+                            still_url = (string?)null,
+                            air_date = "2024-01-01",
+                            runtime = 24,
+                            summary = "",
+                            watched = false
+                        },
+                        new
+                        {
+                            tvmaze_episode_id = 2001,
+                            season_number = 1,
+                            episode_number = 2,
+                            name = "Ep2",
+                            still_url = (string?)null,
+                            air_date = "2099-12-31",
+                            runtime = 24,
+                            summary = "",
+                            watched = false
+                        }
+                    }
+                }
+            }
+        };
+
+        HttpRequestMessage? batchRequest = null;
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.Is<HttpRequestMessage>(r => r.RequestUri != null && r.RequestUri.AbsolutePath == "/media/tv/12345/tvmaze"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(seasonsData, options: JsonOptions)
+            });
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.Is<HttpRequestMessage>(r => r.RequestUri != null && r.RequestUri.AbsolutePath == "/tracking/batch"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK))
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => batchRequest = req);
+
+        await _service.ToggleAllTvEpisodesAsync(12345, "TestShow", true);
+
+        Assert.NotNull(batchRequest);
+        var body = await batchRequest.Content!.ReadAsStringAsync();
+        var json = JsonDocument.Parse(body);
+        var episodes = json.RootElement.GetProperty("episodes").EnumerateArray().ToList();
+        Assert.Single(episodes);
+        Assert.Equal(1001, episodes[0].GetProperty("tvmaze_episode_id").GetInt64());
+    }
+
+    [Fact]
+    public async Task ToggleAllTvEpisodesAsync_IncludesFutureEpisodesWhenUnwatch()
+    {
+        var seasonsData = new
+        {
+            tvmaze_id = 14459,
+            seasons = new[]
+            {
+                new
+                {
+                    tvmaze_season_id = 38865,
+                    season_number = 1,
+                    name = "Season 1",
+                    episode_count = 2,
+                    poster_url = (string?)null,
+                    episodes = new[]
+                    {
+                        new
+                        {
+                            tvmaze_episode_id = 1001,
+                            season_number = 1,
+                            episode_number = 1,
+                            name = "Ep1",
+                            still_url = (string?)null,
+                            air_date = "2024-01-01",
+                            runtime = 24,
+                            summary = "",
+                            watched = false
+                        },
+                        new
+                        {
+                            tvmaze_episode_id = 2001,
+                            season_number = 1,
+                            episode_number = 2,
+                            name = "Ep2",
+                            still_url = (string?)null,
+                            air_date = "2099-12-31",
+                            runtime = 24,
+                            summary = "",
+                            watched = false
+                        }
+                    }
+                }
+            }
+        };
+
+        HttpRequestMessage? batchRequest = null;
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.Is<HttpRequestMessage>(r => r.RequestUri != null && r.RequestUri.AbsolutePath == "/media/tv/12345/tvmaze"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(seasonsData, options: JsonOptions)
+            });
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.Is<HttpRequestMessage>(r => r.RequestUri != null && r.RequestUri.AbsolutePath == "/tracking/batch"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK))
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => batchRequest = req);
+
+        await _service.ToggleAllTvEpisodesAsync(12345, "TestShow", false);
+
+        Assert.NotNull(batchRequest);
+        var body = await batchRequest.Content!.ReadAsStringAsync();
+        var json = JsonDocument.Parse(body);
+        var episodes = json.RootElement.GetProperty("episodes").EnumerateArray().ToList();
+        Assert.Equal(2, episodes.Count);
+    }
+
+    [Fact]
     public async Task ToggleAllTvEpisodesAsync_DoesNothingWhenTvmazeNull()
     {
         _handlerMock.Protected()
