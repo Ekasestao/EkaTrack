@@ -21,6 +21,21 @@ public static class CustomListService
             .OrderByDescending(i => _interactionTimes.TryGetValue($"{i.TmdbId}:{i.MediaType}", out var t) ? t : DateTime.MinValue)];
     }
 
+    public static List<ListItemModel> SortWithFullyWatched(
+        List<ListItemModel> items,
+        HashSet<string> fullyWatchedKeys,
+        string sortOrder = "none")
+    {
+        if (sortOrder == "asc")
+            return [.. items.OrderBy(i => i.Title)];
+        if (sortOrder == "desc")
+            return [.. items.OrderByDescending(i => i.Title)];
+
+        var notWatched = items.Where(i => !fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}")).ToList();
+        var watched = items.Where(i => fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}")).ToList();
+        return [.. notWatched, .. watched];
+    }
+
     public static void ClearInteractions()
     {
         _interactionTimes.Clear();

@@ -592,14 +592,12 @@
     private HashSet<string> _dislikedKeys = [];
     private HashSet<string> _watchedKeys = [];
     private HashSet<string> _inAnyListKeys = [];
+    private HashSet<string> _fullyWatchedKeys = [];
     private List<ListItemModel> sortedCurrentItems
     {
         get
         {
-            if (_sortOrder == "none") return currentItems;
-            return _sortOrder == "asc"
-                ? currentItems.OrderBy(i => i.Title).ToList()
-                : currentItems.OrderByDescending(i => i.Title).ToList();
+            return CustomListService.SortWithFullyWatched(currentItems, _fullyWatchedKeys, _sortOrder);
         }
     }
 
@@ -696,6 +694,7 @@
             try
             {
                 currentItems = await ListsService.GetListItemsAsync(listId.Value, string.IsNullOrEmpty(mediaFilter) ? null : mediaFilter);
+                await LoadFullyWatchedStateAsync();
             }
             catch
             {
@@ -797,6 +796,54 @@
         catch { _watchedKeys = []; }
     }
 
+    private async Task LoadFullyWatchedStateAsync()
+    {
+        _fullyWatchedKeys = [];
+        if (currentItems.Count == 0) return;
+
+        var tvItems = currentItems.Where(i => i.MediaType == "tv").ToList();
+        var movieItems = currentItems.Where(i => i.MediaType == "movie").ToList();
+
+        foreach (var item in movieItems)
+        {
+            var key = $"{item.TmdbId}:{item.MediaType}";
+            if (_watchedKeys.Contains(key))
+                _fullyWatchedKeys.Add(key);
+        }
+
+        if (tvItems.Count == 0) return;
+
+        var tasks = tvItems.Select(async item =>
+        {
+            try
+            {
+                var tvmazeData = await Tvmaze.GetTvmazeSeasonsAsync(item.TmdbId);
+                if (tvmazeData?.Seasons is null || tvmazeData.Seasons.Count == 0) return;
+
+                var allAiredEpisodes = tvmazeData.Seasons
+                    .SelectMany(s => s.Episodes ?? [])
+                    .Where(ep => HasAired(ep.AirDate))
+                    .ToList();
+
+                if (allAiredEpisodes.Count > 0 && allAiredEpisodes.All(ep => ep.Watched))
+                {
+                    _fullyWatchedKeys.Add($"{item.TmdbId}:{item.MediaType}");
+                }
+            }
+            catch { }
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    private static bool HasAired(string? airDate)
+    {
+        if (string.IsNullOrEmpty(airDate)) return true;
+        if (DateOnly.TryParse(airDate, out var date))
+            return date <= DateOnly.FromDateTime(DateTime.UtcNow);
+        return true;
+    }
+
     private async Task LoadInAnyListKeysAsync()
     {
         _inAnyListKeys = [];
@@ -896,12 +943,11 @@
             if (_watchedKeys.Contains(key))
             {
                 _watchedKeys.Remove(key);
+                _fullyWatchedKeys.Remove(key);
                 var items = await ListsService.GetListItemsAsync(watchedListId.Value);
                 var li = items.FirstOrDefault(i => i.TmdbId == item.TmdbId && i.MediaType == item.MediaType);
                 if (li is not null)
                     await ListsService.RemoveItemFromListAsync(watchedListId.Value, li.Id);
-                if (activeTab == "watched")
-                    await LoadData();
                 if (item.MediaType == "tv")
                     await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, false);
             }
@@ -912,6 +958,7 @@
                 if (item.MediaType == "tv")
                     await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, true);
             }
+            await LoadData();
         }
         catch { }
     }

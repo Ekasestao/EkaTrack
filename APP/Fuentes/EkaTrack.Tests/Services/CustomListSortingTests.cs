@@ -95,4 +95,73 @@ public class CustomListSortingTests : IDisposable
         Assert.Equal(1, result[0].TmdbId);
         Assert.Equal(3, result[1].TmdbId);
     }
+
+    [Fact]
+    public void SortWithFullyWatched_NoWatchedItems_KeepsOriginalOrder()
+    {
+        var fullyWatched = new HashSet<string>();
+        var result = CustomListService.SortWithFullyWatched(_items, fullyWatched);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(1, result[0].TmdbId);
+        Assert.Equal(2, result[1].TmdbId);
+        Assert.Equal(3, result[2].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_OneFullyWatched_MovesToBottom()
+    {
+        var fullyWatched = new HashSet<string> { "2:movie" };
+        var result = CustomListService.SortWithFullyWatched(_items, fullyWatched);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(1, result[0].TmdbId);
+        Assert.Equal(3, result[1].TmdbId);
+        Assert.Equal(2, result[2].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_AllFullyWatched_AllAtBottom()
+    {
+        var fullyWatched = new HashSet<string> { "1:movie", "2:movie", "3:tv" };
+        var result = CustomListService.SortWithFullyWatched(_items, fullyWatched);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(1, result[0].TmdbId);
+        Assert.Equal(2, result[1].TmdbId);
+        Assert.Equal(3, result[2].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_MultipleFullyWatched_PreservesOrderWithinGroups()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "movie", Title = "Alpha" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "Beta" },
+            new() { TmdbId = 3, MediaType = "movie", Title = "Gamma" },
+            new() { TmdbId = 4, MediaType = "tv", Title = "Delta" },
+        };
+        var fullyWatched = new HashSet<string> { "2:tv", "4:tv" };
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(4, result.Count);
+        Assert.Equal(1, result[0].TmdbId);
+        Assert.Equal(3, result[1].TmdbId);
+        Assert.Equal(2, result[2].TmdbId);
+        Assert.Equal(4, result[3].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_AlphabeticalSort_IgnoresFullyWatched()
+    {
+        var fullyWatched = new HashSet<string> { "2:movie" };
+        var result = CustomListService.SortWithFullyWatched(_items, fullyWatched, "asc");
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(1, result[0].TmdbId);
+        Assert.Equal(2, result[1].TmdbId);
+        Assert.Equal(3, result[2].TmdbId);
+    }
 }
