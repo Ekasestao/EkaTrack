@@ -955,6 +955,7 @@
             {
                 await ListsService.AddItemToListAsync(watchedListId.Value, item.TmdbId, item.MediaType, item.Title, item.PosterPath, item.VoteAverage);
                 _watchedKeys.Add(key);
+                _fullyWatchedKeys.Add(key);
                 if (item.MediaType == "tv")
                     await Tvmaze.ToggleAllTvEpisodesAsync(item.TmdbId, item.Title, true);
             }
