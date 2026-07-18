@@ -550,6 +550,7 @@ else
             {
                 var item = await ListsService.AddItemToListAsync(
                     listId, _listSelectorItem.Id, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
+                await ListsService.InteractItemAsync(_listSelectorItem.Id, _listSelectorItem.MediaType);
                 (listItemIds ??= [])[listId] = item.Id;
             }
         }
@@ -566,6 +567,7 @@ else
             var newList = await ListsService.CreateListAsync(newListName, null);
             var item = await ListsService.AddItemToListAsync(
                 newList.Id, _listSelectorItem.Id, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
+            await ListsService.InteractItemAsync(_listSelectorItem.Id, _listSelectorItem.MediaType);
             allLists.Add(new ListInfo
             {
                 Id = newList.Id,

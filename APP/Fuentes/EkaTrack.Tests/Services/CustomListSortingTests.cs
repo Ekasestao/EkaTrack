@@ -225,4 +225,38 @@ public class CustomListSortingTests : IDisposable
         Assert.Equal(2, result[2].TmdbId);
         Assert.Equal(4, result[3].TmdbId);
     }
+
+    [Fact]
+    public void SortWithFullyWatched_SqliteDateFormat_SpaceInsteadOfT_ParsesCorrectly()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "tv", Title = "Old", LastInteractedAt = "2025-07-19 12:00:00", AddedAt = "2025-01-01 10:00:00" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "New", LastInteractedAt = "2025-07-20 14:30:00", AddedAt = "2025-07-20 14:29:00" },
+        };
+        var fullyWatched = new HashSet<string>();
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result[0].TmdbId);
+        Assert.Equal(1, result[1].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_SameLastInteractedAt_NewerAddedAtFirst()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "tv", Title = "Existing", LastInteractedAt = "2025-07-19T12:00:00", AddedAt = "2025-01-01T10:00:00" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "NewlyAdded", LastInteractedAt = "2025-07-19T12:00:00", AddedAt = "2025-07-19T11:59:59" },
+        };
+        var fullyWatched = new HashSet<string>();
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(2, result[0].TmdbId);
+        Assert.Equal(1, result[1].TmdbId);
+    }
 }

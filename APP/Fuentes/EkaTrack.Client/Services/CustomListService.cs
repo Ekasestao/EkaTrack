@@ -33,9 +33,11 @@ public static class CustomListService
 
         var notWatched = items.Where(i => !fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}"))
             .OrderByDescending(i => string.IsNullOrEmpty(i.LastInteractedAt) ? DateTime.MinValue : DateTime.TryParse(i.LastInteractedAt, out var t) ? t : DateTime.MinValue)
+            .ThenByDescending(i => string.IsNullOrEmpty(i.AddedAt) ? DateTime.MinValue : DateTime.TryParse(i.AddedAt, out var a) ? a : DateTime.MinValue)
             .ToList();
         var watched = items.Where(i => fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}"))
-            .OrderByDescending(i => string.IsNullOrEmpty(i.LastInteractedAt) ? DateTime.MinValue : DateTime.TryParse(i.LastInteractedAt, out var t) ? t : DateTime.MinValue)
+            .OrderByDescending(i => string.IsNullOrEmpty(i.LastInteractedAt) ? DateTime.MinValue : DateTime.TryParse(i.LastInteractedAt, out var t2) ? t2 : DateTime.MinValue)
+            .ThenByDescending(i => string.IsNullOrEmpty(i.AddedAt) ? DateTime.MinValue : DateTime.TryParse(i.AddedAt, out var a2) ? a2 : DateTime.MinValue)
             .ToList();
         return [.. notWatched, .. watched];
     }

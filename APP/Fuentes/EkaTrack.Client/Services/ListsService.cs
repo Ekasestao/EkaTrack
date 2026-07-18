@@ -86,6 +86,7 @@ public class ListsService
 
     public async Task InteractItemAsync(int tmdbId, string mediaType)
     {
-        await _http.PostAsJsonAsync("/items/interact", new { tmdb_id = tmdbId, media_type = mediaType }, JsonOptions);
+        var response = await _http.PostAsJsonAsync("/items/interact", new { tmdb_id = tmdbId, media_type = mediaType }, JsonOptions);
+        response.EnsureSuccessStatusCode();
     }
 }

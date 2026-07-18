@@ -937,7 +937,6 @@
     private async Task OpenListSelector(ListItemModel item)
     {
         var key = $"{item.TmdbId}:{item.MediaType}";
-        await ListsService.InteractItemAsync(item.TmdbId, item.MediaType);
         _listSelectorItem = item;
         showCustomModal = true;
         await LoadLists();
@@ -1218,7 +1217,6 @@
         var listId = selectedListId;
         if (listId == null) return;
         var key = $"{item.Id}:{item.MediaType}";
-        await ListsService.InteractItemAsync(item.Id, item.MediaType);
         if (addTitlesInList.Contains(key))
         {
             if (addTitlesItemIds.TryGetValue(key, out var listItemId))
@@ -1237,6 +1235,7 @@
             {
                 await ListsService.AddItemToListAsync(
                     listId.Value, item.Id, item.MediaType, item.Title, item.PosterPath, item.VoteAverage);
+                await ListsService.InteractItemAsync(item.Id, item.MediaType);
                 addTitlesInList.Add(key);
             }
             catch { }
@@ -1247,6 +1246,7 @@
     {
         showAddTitlesModal = false;
         await LoadData();
+        await LoadInAnyListKeysAsync();
         StateHasChanged();
     }
 }

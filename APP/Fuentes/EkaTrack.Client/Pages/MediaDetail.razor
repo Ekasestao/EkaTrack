@@ -995,6 +995,7 @@ else
             {
                 var item = await ListsService.AddItemToListAsync(
                     listId, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
+                await ListsService.InteractItemAsync(detail.Id, Type);
                 (listItemIds ??= [])[listId] = item.Id;
             }
 
@@ -1017,6 +1018,7 @@ else
             var newList = await ListsService.CreateListAsync(newListName, null);
             var item = await ListsService.AddItemToListAsync(
                 newList.Id, detail.Id, Type, detail.Title, detail.PosterPath, detail.VoteAverage);
+            await ListsService.InteractItemAsync(detail.Id, Type);
             allLists.Add(new ListInfo
             {
                 Id = newList.Id,
