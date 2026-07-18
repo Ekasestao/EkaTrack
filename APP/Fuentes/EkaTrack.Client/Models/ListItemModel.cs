@@ -24,4 +24,7 @@ public class ListItemModel
 
     [JsonPropertyName("added_at")]
     public string AddedAt { get; set; } = "";
+
+    [JsonPropertyName("last_interacted_at")]
+    public string LastInteractedAt { get; set; } = "";
 }

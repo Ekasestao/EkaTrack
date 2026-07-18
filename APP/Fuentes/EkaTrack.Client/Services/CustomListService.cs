@@ -31,8 +31,12 @@ public static class CustomListService
         if (sortOrder == "desc")
             return [.. items.OrderByDescending(i => i.Title)];
 
-        var notWatched = items.Where(i => !fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}")).ToList();
-        var watched = items.Where(i => fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}")).ToList();
+        var notWatched = items.Where(i => !fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}"))
+            .OrderByDescending(i => string.IsNullOrEmpty(i.LastInteractedAt) ? DateTime.MinValue : DateTime.TryParse(i.LastInteractedAt, out var t) ? t : DateTime.MinValue)
+            .ToList();
+        var watched = items.Where(i => fullyWatchedKeys.Contains($"{i.TmdbId}:{i.MediaType}"))
+            .OrderByDescending(i => string.IsNullOrEmpty(i.LastInteractedAt) ? DateTime.MinValue : DateTime.TryParse(i.LastInteractedAt, out var t) ? t : DateTime.MinValue)
+            .ToList();
         return [.. notWatched, .. watched];
     }
 

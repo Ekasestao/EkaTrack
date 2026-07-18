@@ -164,4 +164,65 @@ public class CustomListSortingTests : IDisposable
         Assert.Equal(2, result[1].TmdbId);
         Assert.Equal(3, result[2].TmdbId);
     }
+
+    [Fact]
+    public void SortWithFullyWatched_MostRecentInteractionFirst_WithinNotWatchedGroup()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "tv", Title = "Old", LastInteractedAt = "2025-01-01T10:00:00" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "Mid", LastInteractedAt = "2025-06-01T10:00:00" },
+            new() { TmdbId = 3, MediaType = "tv", Title = "New", LastInteractedAt = "2025-12-01T10:00:00" },
+        };
+        var fullyWatched = new HashSet<string>();
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(3, result[0].TmdbId);
+        Assert.Equal(2, result[1].TmdbId);
+        Assert.Equal(1, result[2].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_MostRecentInteractionFirst_WithinWatchedGroup()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "tv", Title = "Old", LastInteractedAt = "2025-01-01T10:00:00" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "New", LastInteractedAt = "2025-12-01T10:00:00" },
+            new() { TmdbId = 3, MediaType = "tv", Title = "Mid", LastInteractedAt = "2025-06-01T10:00:00" },
+        };
+        var fullyWatched = new HashSet<string> { "1:tv", "2:tv", "3:tv" };
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(2, result[0].TmdbId);
+        Assert.Equal(3, result[1].TmdbId);
+        Assert.Equal(1, result[2].TmdbId);
+    }
+
+    [Fact]
+    public void SortWithFullyWatched_MixedGroups_MostRecentFirstInEach()
+    {
+        var items = new List<ListItemModel>
+        {
+            new() { TmdbId = 1, MediaType = "tv", Title = "Unwatched-Old", LastInteractedAt = "2025-01-01T10:00:00" },
+            new() { TmdbId = 2, MediaType = "tv", Title = "Watched-New", LastInteractedAt = "2025-12-01T10:00:00" },
+            new() { TmdbId = 3, MediaType = "tv", Title = "Unwatched-New", LastInteractedAt = "2025-06-01T10:00:00" },
+            new() { TmdbId = 4, MediaType = "tv", Title = "Watched-Old", LastInteractedAt = "2025-03-01T10:00:00" },
+        };
+        var fullyWatched = new HashSet<string> { "2:tv", "4:tv" };
+
+        var result = CustomListService.SortWithFullyWatched(items, fullyWatched);
+
+        Assert.Equal(4, result.Count);
+        // Not watched: 3 (Jun) first, then 1 (Jan)
+        Assert.Equal(3, result[0].TmdbId);
+        Assert.Equal(1, result[1].TmdbId);
+        // Watched: 2 (Dec) first, then 4 (Mar)
+        Assert.Equal(2, result[2].TmdbId);
+        Assert.Equal(4, result[3].TmdbId);
+    }
 }

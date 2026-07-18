@@ -694,7 +694,7 @@
             try
             {
                 currentItems = await ListsService.GetListItemsAsync(listId.Value, string.IsNullOrEmpty(mediaFilter) ? null : mediaFilter);
-                await LoadFullyWatchedStateAsync();
+                LoadFullyWatchedState();
             }
             catch
             {
@@ -796,52 +796,15 @@
         catch { _watchedKeys = []; }
     }
 
-    private async Task LoadFullyWatchedStateAsync()
+    private void LoadFullyWatchedState()
     {
         _fullyWatchedKeys = [];
-        if (currentItems.Count == 0) return;
-
-        var tvItems = currentItems.Where(i => i.MediaType == "tv").ToList();
-        var movieItems = currentItems.Where(i => i.MediaType == "movie").ToList();
-
-        foreach (var item in movieItems)
+        foreach (var item in currentItems)
         {
             var key = $"{item.TmdbId}:{item.MediaType}";
             if (_watchedKeys.Contains(key))
                 _fullyWatchedKeys.Add(key);
         }
-
-        if (tvItems.Count == 0) return;
-
-        var tasks = tvItems.Select(async item =>
-        {
-            try
-            {
-                var tvmazeData = await Tvmaze.GetTvmazeSeasonsAsync(item.TmdbId);
-                if (tvmazeData?.Seasons is null || tvmazeData.Seasons.Count == 0) return;
-
-                var allAiredEpisodes = tvmazeData.Seasons
-                    .SelectMany(s => s.Episodes ?? [])
-                    .Where(ep => HasAired(ep.AirDate))
-                    .ToList();
-
-                if (allAiredEpisodes.Count > 0 && allAiredEpisodes.All(ep => ep.Watched))
-                {
-                    _fullyWatchedKeys.Add($"{item.TmdbId}:{item.MediaType}");
-                }
-            }
-            catch { }
-        });
-
-        await Task.WhenAll(tasks);
-    }
-
-    private static bool HasAired(string? airDate)
-    {
-        if (string.IsNullOrEmpty(airDate)) return true;
-        if (DateOnly.TryParse(airDate, out var date))
-            return date <= DateOnly.FromDateTime(DateTime.UtcNow);
-        return true;
     }
 
     private async Task LoadInAnyListKeysAsync()
@@ -1029,8 +992,11 @@
             {
                 var item = await ListsService.AddItemToListAsync(
                     listId, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
+                await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
                 (listItemIds ??= [])[listId] = item.Id;
             }
+            if (selectedListId == listId)
+                await Reload();
         }
         catch { }
         actionLoading = false;
@@ -1045,6 +1011,7 @@
             var newList = await ListsService.CreateListAsync(newListName, null);
             var item = await ListsService.AddItemToListAsync(
                 newList.Id, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
+            await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
             allLists.Add(new ListInfo
             {
                 Id = newList.Id,
