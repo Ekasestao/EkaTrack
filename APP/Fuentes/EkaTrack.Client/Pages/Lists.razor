@@ -989,6 +989,7 @@
             }
             else
             {
+                await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
                 var item = await ListsService.AddItemToListAsync(
                     listId, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
                 await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
@@ -1008,6 +1009,7 @@
         try
         {
             var newList = await ListsService.CreateListAsync(newListName, null);
+            await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
             var item = await ListsService.AddItemToListAsync(
                 newList.Id, _listSelectorItem.TmdbId, _listSelectorItem.MediaType, _listSelectorItem.Title, _listSelectorItem.PosterPath, _listSelectorItem.VoteAverage);
             await ListsService.InteractItemAsync(_listSelectorItem.TmdbId, _listSelectorItem.MediaType);
